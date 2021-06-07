@@ -1,0 +1,39 @@
+name: Build
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - arm-unknown-linux-musleabihf
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: actions-rs/cargo@v1
+        name: Test
+        with:
+          use-cross: true
+          command: test
+          args: --target=${{ matrix.target }}
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
+      - uses: actions-rs/cargo@v1
+        name: Build
+        with:
+          use-cross: true
+          command: build
+          args: --release --target=${{ matrix.target }}
+      - run: find target -name easy-suricata
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.target }}-easy-suricata
+          path: target/${{ matrix.target }}/release/easy-suricata
