@@ -1,7 +1,11 @@
 # Easy-Suricata
 
-Easy-Suricata is a tool too easily run Suricata (and optionally
+Easy-Suricata is a tool to easily run Suricata (and optionally
 EveBox) on Linux systems using Docker or Podman.
+
+This program is considered experimental and many things may change,
+break, change name, change repo, etc, etc... And I might even
+force push!
 
 ## System Requirements
 
@@ -9,6 +13,16 @@ EveBox) on Linux systems using Docker or Podman.
   Podman. This includes most Linux distributions available today
   including Raspberry Pi OS (32 bit or 64 bit).
 - Root access.
+
+### NOTE for Raspberry Pi Users
+
+If on a Raspberry Pi make sure to NOT use an SD card for the data
+directory. Heavy logging on an SD card is not only bad for the life of
+the SD card, but can lead to the system being unresponsive, especially
+if the logs are also being processed by a tool like EveBox.
+
+Be sure to set a data directory that is not on the SD card in the
+configure menu.
 
 ## Installation the Easy Way
 

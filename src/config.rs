@@ -40,10 +40,20 @@ pub struct Config {
     pub interface: Option<String>,
     #[serde(default)]
     pub evebox: EveBoxConfig,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "bpf-filter",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub bpf_filter: Option<String>,
-    #[serde(default)]
+    #[serde(rename = "start-on-boot", default)]
     pub start_on_boot: bool,
+    #[serde(
+        rename = "data-directory",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub data_directory: Option<String>,
 }
 
 impl Config {

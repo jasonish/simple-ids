@@ -40,10 +40,10 @@ mod docker;
 mod ffi;
 mod podman;
 
-const DEFAULT_SURICATA_IMAGE: &str = "jasonish/suricata:latest";
+const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
 const SURICATA_CONTAINER_NAME: &str = "easy-suricata--suricata";
 
-const DEFAULT_EVEBOX_IMAGE: &str = "jasonish/evebox:latest";
+const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:latest";
 const EVEBOX_CONTAINER_NAME: &str = "easy-suricata--evebox";
 
 const TITLE_PREFIX: &str = "Easy Suricata";
@@ -83,21 +83,44 @@ struct Context {
 }
 
 impl Context {
-    /// A function to resolve a volume configuration for a given volume. This is to abstract
-    /// away some of the details of the volumes from the start commands. For example, whether
-    /// or not a bind mount or a proper volume is being used.
-    ///
-    /// By default a container volume is used.
-    ///
-    /// TODO: Bind mount to use configurable data directory.
     fn get_volume_config(&self, volume: Volume) -> String {
+        let source = self.get_volume_source(&volume);
         match volume {
-            Volume::Log => format!("--volume={}-log:/var/log/suricata", SURICATA_CONTAINER_NAME),
-            Volume::Etc => format!("--volume={}-etc:/etc/suricata", SURICATA_CONTAINER_NAME),
-            Volume::Run => format!("--volume={}-run:/run/suricata", SURICATA_CONTAINER_NAME),
-            Volume::Lib => format!("--volume={}-run:/var/lib/suricata", SURICATA_CONTAINER_NAME),
-            Volume::EveBoxData => format!("--volume={}-data:/data", EVEBOX_CONTAINER_NAME),
+            Volume::Etc => format!("--volume={}:/etc/suricata", source),
+            Volume::Run => format!("--volume={}:/run/suricata", source),
+            Volume::Lib => format!("--volume={}:/var/lib/suricata", source),
+            Volume::EveBoxData => format!("--volume={}:/data", source),
+            Volume::Log => format!("--volume={}:/var/log/suricata", source),
         }
+    }
+
+    fn get_volume_source(&self, volume: &Volume) -> String {
+        let data_directory = if let Some(dir) = &self.config.data_directory {
+            format!("{}/", dir)
+        } else {
+            "".to_string()
+        };
+        let source = match volume {
+            Volume::Etc => format!("{}-etc", SURICATA_CONTAINER_NAME),
+            Volume::Run => format!("{}-run", SURICATA_CONTAINER_NAME),
+            Volume::Lib => format!("{}-lib", SURICATA_CONTAINER_NAME),
+            Volume::Log => format!("{}{}-log", &data_directory, SURICATA_CONTAINER_NAME),
+            Volume::EveBoxData => format!("{}{}-data", &data_directory, EVEBOX_CONTAINER_NAME),
+        };
+
+        // If source is a real path, try to make sure it exists (required for Podman).
+        if source.starts_with('/') {
+            if let Err(err) = ensure_exists(&source) {
+                match self.runtime {
+                    ContainerRuntime::Docker => {}
+                    ContainerRuntime::Podman => {
+                        tracing::error!("Failed to create directory {}: {}", source, err);
+                    }
+                }
+            }
+        }
+
+        source
     }
 }
 
@@ -241,6 +264,14 @@ impl<'a> ConfigureMenu<'a> {
                 }
             );
             println!("5. Start on Boot: {}", self.context.config.start_on_boot);
+            println!(
+                "6. Data Directory: {}",
+                self.context
+                    .config
+                    .data_directory
+                    .as_ref()
+                    .unwrap_or(&"(none)".to_string())
+            );
             println!("x. Exit");
             println!();
 
@@ -251,6 +282,7 @@ impl<'a> ConfigureMenu<'a> {
                 "3" => self.toggle_evebox_external_access()?,
                 "4" => self.set_bpf_filter()?,
                 "5" => self.toggle_start_on_boot()?,
+                "6" => self.set_data_directory()?,
                 "x" => break,
                 _ => {}
             }
@@ -276,6 +308,35 @@ impl<'a> ConfigureMenu<'a> {
             self.context.config.bpf_filter = None;
         } else {
             self.context.config.bpf_filter = Some(filter);
+        }
+        self.context.config.save(None)?;
+        Ok(())
+    }
+
+    fn set_data_directory(&mut self) -> Result<()> {
+        if ffi::getuid() != 0 {
+            println!();
+            println!("NOTE: It is possible to use a directory that may not be writable");
+            println!("      by the user running easy-suricata. If so, create the directory");
+            println!("      then come back and configure it here.");
+        }
+        print!("Enter data directory: ");
+        let directory = term::read_line();
+        if directory.is_empty() {
+            self.context.config.data_directory = None;
+        } else {
+            if let Err(err) = ensure_exists(&directory) {
+                tracing::error!("Failed to set data directory: {}: {}", &directory, err);
+                return Ok(());
+            }
+            match std::fs::canonicalize(&directory) {
+                Ok(path) => {
+                    self.context.config.data_directory = Some(path.to_str().unwrap().to_string());
+                }
+                Err(err) => {
+                    tracing::error!("Bad directory: {}", err);
+                }
+            }
         }
         self.context.config.save(None)?;
         Ok(())
@@ -340,6 +401,15 @@ impl<'a> ConfigureMenu<'a> {
         self.context.config.save(None)?;
         Ok(())
     }
+}
+
+fn ensure_exists(path: &str) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    if !std::path::Path::new(&path).exists() {
+        std::fs::create_dir_all(&path)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o2750))?;
+    }
+    Ok(())
 }
 
 fn main_menu(context: &mut Context) -> Result<()> {
