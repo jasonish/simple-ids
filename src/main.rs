@@ -32,6 +32,8 @@ use crate::config::Config;
 use crate::container::ContainerRuntime;
 use crate::term::dummy_prompt;
 
+use tracing::info;
+
 #[macro_use]
 mod term;
 mod config;
@@ -599,6 +601,20 @@ fn start_suricata(context: &Context) -> Result<()> {
 
     let lib_vol = context.get_volume_config(Volume::Lib);
     args.push(&lib_vol);
+
+    let disable_vol;
+    if let Ok(path) = std::fs::canonicalize("./disable.conf") {
+        info!("Found {}", path.display());
+        disable_vol = format!("--volume={}:/etc/suricata/disable.conf", path.display());
+        args.push(&disable_vol);
+    }
+
+    let enable_vol;
+    if let Ok(path) = std::fs::canonicalize("./enable.conf") {
+        info!("Found {}", path.display());
+        enable_vol = format!("--volume={}:/etc/suricata/enable.conf", path.display());
+        args.push(&enable_vol);
+    }
 
     // Restart policy.
     if context.runtime == ContainerRuntime::Docker && context.config.start_on_boot {

@@ -41,6 +41,17 @@ Once you have the program download, run it:
 Under the configure menu select your network interface, enable EveBox
 if desired than select "Start" from the main menu.
 
+## Configuration
+
+The basic configuration is done within the menu system, however this
+doesn't work well for a lot of whats configurable in Suricata, so some
+files are supported as well:
+
+* `./disable.conf`: Used by Suricata-Update to disable rules
+* `./enable.conf`: Used by Suricata-Update to enable rules
+
+_and more will come..._
+
 ## Building
 
 If you just want to use Easy-Suricata you can download a pre-compiled
