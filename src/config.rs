@@ -24,7 +24,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
-const DEFAULT_FILENAME: &str = "easy-suricata.json";
+const DEFAULT_FILENAME: &str = "easy.yml";
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct EveBoxConfig {
@@ -71,7 +71,7 @@ impl Config {
     pub fn save(&self, filename: Option<&str>) -> Result<()> {
         let filename = filename.unwrap_or(DEFAULT_FILENAME);
         let mut file = std::fs::File::create(filename)?;
-        let config = serde_json::to_string(self)?;
+        let config = serde_yaml::to_string(self)?;
         file.write_all(config.as_bytes())?;
         Ok(())
     }
@@ -84,7 +84,7 @@ impl Config {
     }
 
     pub fn parse(buf: &str) -> Result<Config> {
-        let config = serde_json::from_str(buf)?;
+        let config = serde_yaml::from_str(buf)?;
         Ok(config)
     }
 }
