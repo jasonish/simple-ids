@@ -44,12 +44,12 @@ mod podman;
 mod update;
 
 const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
-const SURICATA_CONTAINER_NAME: &str = "easy-suricata--suricata";
+const SURICATA_CONTAINER_NAME: &str = "easy-suricata";
 
 const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:latest";
-const EVEBOX_CONTAINER_NAME: &str = "easy-suricata--evebox";
+const EVEBOX_CONTAINER_NAME: &str = "easy-evebox";
 
-const TITLE_PREFIX: &str = "Easy Suricata";
+const TITLE_PREFIX: &str = "Easy - Suricata/EveBox";
 
 #[derive(Clap, Debug, Clone)]
 #[clap(name = "easy-suricata", setting = clap::AppSettings::ColoredHelp)]
@@ -104,11 +104,11 @@ impl Context {
             "".to_string()
         };
         let source = match volume {
-            Volume::Etc => format!("{}-etc", SURICATA_CONTAINER_NAME),
-            Volume::Run => format!("{}-run", SURICATA_CONTAINER_NAME),
-            Volume::Lib => format!("{}-lib", SURICATA_CONTAINER_NAME),
-            Volume::Log => format!("{}{}-log", &data_directory, SURICATA_CONTAINER_NAME),
-            Volume::EveBoxData => format!("{}{}-data", &data_directory, EVEBOX_CONTAINER_NAME),
+            Volume::Etc => format!("{}--etc", SURICATA_CONTAINER_NAME),
+            Volume::Run => format!("{}--run", SURICATA_CONTAINER_NAME),
+            Volume::Lib => format!("{}--lib", SURICATA_CONTAINER_NAME),
+            Volume::Log => format!("{}{}--log", &data_directory, SURICATA_CONTAINER_NAME),
+            Volume::EveBoxData => format!("{}{}--data", &data_directory, EVEBOX_CONTAINER_NAME),
         };
 
         // If source is a real path, try to make sure it exists (required for Podman).
@@ -326,7 +326,7 @@ impl<'a> ConfigureMenu<'a> {
         if ffi::getuid() != 0 {
             println!();
             println!("NOTE: It is possible to use a directory that may not be writable");
-            println!("      by the user running easy-suricata. If so, create the directory");
+            println!("      by the user running easy. If so, create the directory");
             println!("      then come back and configure it here.");
         }
         print!("Enter data directory: ");
@@ -485,7 +485,7 @@ fn main_menu(context: &mut Context) -> Result<()> {
 }
 
 fn shell(context: &Context) -> Result<()> {
-    let ps1 = r#"PS1=\[\033[1;36m\]easy-suricata--suricata \[\033[1;34m\]\w\[\033[0;35m\] \[\033[1;36m\]# \[\033[0m\]"#;
+    let ps1 = r#"PS1=\[\033[1;36m\]easy-suricata \[\033[1;34m\]\w\[\033[0;35m\] \[\033[1;36m\]# \[\033[0m\]"#;
     let mut args = vec![context.runtime.program_name()];
     args.extend_from_slice(&[
         "exec",

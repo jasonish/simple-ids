@@ -139,7 +139,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "easy-suricata"
+name = "dtoa"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
+
+[[package]]
+name = "easy"
 version = "0.1.0"
 dependencies = [
  "anyhow",

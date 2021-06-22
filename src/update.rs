@@ -44,7 +44,7 @@ fn current_checksum(path: &Path) -> Result<String> {
 
 pub fn self_update() -> Result<()> {
     let target = std::env!("TARGET");
-    let url = format!("https://evebox.org/files/easy/{}/easy-suricata", target);
+    let url = format!("https://evebox.org/files/easy/{}/easy", target);
     let hash_url = format!("{}.sha256", url);
     let current_exe = if let Ok(exe) = std::env::current_exe() {
         exe

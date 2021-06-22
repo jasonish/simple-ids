@@ -1,8 +1,10 @@
 [package]
-name = "easy-suricata"
+name = "easy"
 version = "0.1.0"
 authors = ["Jason Ish <ish@unx.ca>"]
 edition = "2018"
+description = "Easy Suricata and EveBox using Containers"
+homepage = "https://github.com/jasonish/easy"
 
 # Some tweaks to reduce binary size.
 [profile.release]

@@ -1,7 +1,7 @@
-# Easy-Suricata
+# Easy - Suricata/EveBox
 
-Easy-Suricata is a tool to easily run Suricata (and optionally
-EveBox) on Linux systems using Docker or Podman.
+Easy is a tool to easily run Suricata (and optionally EveBox) on Linux
+systems using Docker or Podman.
 
 This program is considered experimental and many things may change,
 break, change name, change repo, etc, etc... And I might even
@@ -35,7 +35,7 @@ Or download directly from https://evebox.org/files/easy/.
 Once you have the program download, run it:
 
 ```
-./easy-suricata
+./easy
 ```
 
 Under the configure menu select your network interface, enable EveBox
