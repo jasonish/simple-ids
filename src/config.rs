@@ -22,8 +22,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::io::Read;
-use std::io::Write;
+use std::io::{Read, Write};
 
 const DEFAULT_FILENAME: &str = "easy-suricata.json";
 

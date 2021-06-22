@@ -41,6 +41,7 @@ mod container;
 mod docker;
 mod ffi;
 mod podman;
+mod update;
 
 const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
 const SURICATA_CONTAINER_NAME: &str = "easy-suricata--suricata";
@@ -126,9 +127,7 @@ impl Context {
     }
 }
 
-fn main() -> Result<()> {
-    let opts: Opts = Opts::parse();
-
+fn init_logging(opts: &Opts) {
     let level = if opts.verbose > 1 {
         tracing::Level::TRACE
     } else if opts.verbose > 0 {
@@ -136,11 +135,19 @@ fn main() -> Result<()> {
     } else {
         tracing::Level::INFO
     };
-
     tracing_subscriber::fmt()
         .with_target(false)
-        .with_max_level(level)
+        .with_env_filter(format!(
+            "{},hyper=off,warp=off",
+            &level.to_string().to_lowercase()
+        ))
         .init();
+}
+
+fn main() -> Result<()> {
+    let opts: Opts = Opts::parse();
+    init_logging(&opts);
+
     let config = config::Config::new();
 
     let runtime = match container::find_runtime(opts.podman) {
@@ -353,10 +360,10 @@ impl<'a> ConfigureMenu<'a> {
             .container_running(EVEBOX_CONTAINER_NAME)
         {
             tracing::info!("Restarting EveBox...");
-            if let Err(err) = stop_evebox(&self.context) {
+            if let Err(err) = stop_evebox(self.context) {
                 tracing::error!("Failed to stop EveBox: {}", err);
             }
-            if let Err(err) = start_evebox(&self.context) {
+            if let Err(err) = start_evebox(self.context) {
                 tracing::error!("Failed to start EveBox: {}", err);
             }
         }
@@ -391,14 +398,14 @@ impl<'a> ConfigureMenu<'a> {
                     .runtime
                     .container_running(EVEBOX_CONTAINER_NAME)
             {
-                let _ = start_evebox(&self.context);
+                let _ = start_evebox(self.context);
             }
         } else if self
             .context
             .runtime
             .container_running(EVEBOX_CONTAINER_NAME)
         {
-            let _ = stop_evebox(&self.context);
+            let _ = stop_evebox(self.context);
         }
         self.context.config.save(None)?;
         Ok(())
@@ -454,7 +461,7 @@ fn main_menu(context: &mut Context) -> Result<()> {
         println!("4. Update Rules");
         println!("5. Shell");
         println!("6. Force Log Rotation");
-        println!("7. Update Containers");
+        println!("7. Update");
         println!("8. Configure");
         println!("9. Debug");
         println!("x. Exit");
@@ -582,12 +589,12 @@ fn start_suricata(context: &Context) -> Result<()> {
         args.push("--privileged");
     }
 
+    // Volumes.
+
     // If we have /etc/localtime, provide it as a read-only volume.
     if std::path::Path::new("/etc/localtime").exists() {
         args.push("--volume=/etc/localtime:/etc/localtime:ro");
     }
-
-    // Volumes.
 
     let etc_vol = context.get_volume_config(Volume::Etc);
     args.push(&etc_vol);
@@ -627,7 +634,7 @@ fn start_suricata(context: &Context) -> Result<()> {
 
     if let Some(bpf) = &context.config.bpf_filter {
         if !bpf.is_empty() {
-            args.push(&bpf);
+            args.push(bpf);
         }
     }
 
@@ -692,6 +699,7 @@ fn update(context: &Context) -> Result<()> {
         let args = vec![context.runtime.program_name(), "pull", image];
         let _ = Command::new(&args[0]).args(&args[1..]).status();
     }
+    update::self_update()?;
     term::dummy_prompt("Press ENTER to continue:");
     Ok(())
 }

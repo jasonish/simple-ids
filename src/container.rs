@@ -20,8 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::docker;
-use crate::podman;
+use crate::{docker, podman};
 use anyhow::{anyhow, bail, Result};
 use std::ffi::OsStr;
 use std::process::Command;
