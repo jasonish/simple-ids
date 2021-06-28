@@ -27,6 +27,7 @@ configure menu.
 ## Installation the Easy Way
 
 ```
+mkdir ~/easy
 curl -sSf https://evebox.org/easy.sh | sh
 ```
 
