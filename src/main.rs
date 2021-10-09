@@ -46,7 +46,7 @@ mod update;
 const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
 const SURICATA_CONTAINER_NAME: &str = "easy-suricata";
 
-const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:latest";
+const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
 const EVEBOX_CONTAINER_NAME: &str = "easy-evebox";
 
 const TITLE_PREFIX: &str = "Easy - Suricata/EveBox";
