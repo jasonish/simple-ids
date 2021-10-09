@@ -559,6 +559,11 @@ fn start_evebox(context: &Context) -> Result<()> {
         "sqlite",
     ]);
     tracing::info!("Starting EveBox");
+    tracing::debug!(
+        "Executing: {} {}",
+        context.runtime.program_name(),
+        args.join(" ")
+    );
     if let Err(err) = context.runtime.exec_output(&args) {
         tracing::error!("Failed to start EveBox: {}", err);
     }
