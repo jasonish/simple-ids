@@ -32,7 +32,7 @@ use crate::config::Config;
 use crate::container::ContainerRuntime;
 use crate::term::dummy_prompt;
 
-use tracing::info;
+use tracing::{error, info};
 
 #[macro_use]
 mod term;
@@ -582,11 +582,6 @@ fn start_suricata(context: &Context) -> Result<()> {
     args.push("--net=host");
     args.extend_from_slice(&["--name", SURICATA_CONTAINER_NAME]);
 
-    // Not sure if this is needed.
-    // let env_uid = format!("PUID={}", ffi::getuid());
-    // let env_gid = format!("PGID={}", ffi::getgid());
-    // args.extend_from_slice(&["-e", &env_uid, "-e", &env_gid]);
-
     args.push("--cap-add=sys_nice");
     args.push("--cap-add=net_admin");
     args.push("--cap-add=net_raw");
@@ -675,7 +670,9 @@ fn start(context: &Context) -> Result<()> {
 
 fn update_rules(context: &Context) -> Result<()> {
     let args = &["exec", "-it", SURICATA_CONTAINER_NAME, "suricata-update"];
-    context.runtime.exec_status(args)?;
+    if let Err(_) = context.runtime.exec_status(args) {
+        error!("An error occurred while trying to update the rules.");
+    }
     if context.interactive {
         term::prompt_for_enter();
     }
