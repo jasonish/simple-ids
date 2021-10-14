@@ -43,6 +43,7 @@ mod ffi;
 mod podman;
 mod update;
 
+const DEFAULT_SURICATA_IMAGE_BASE: &str = "docker.io/jasonish/suricata";
 const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
 const SURICATA_CONTAINER_NAME: &str = "easy-suricata";
 
@@ -77,6 +78,52 @@ enum Volume {
     Lib,
     Etc,
     EveBoxData,
+}
+
+struct Uname {}
+
+impl Uname {
+    fn machine() -> Option<String> {
+        if let Ok(output) = Command::new("uname").args(["-m"]).output() {
+            if let Ok(mut stdout) = String::from_utf8(output.stdout) {
+                stdout.retain(|c| !c.is_ascii_whitespace());
+                Some(stdout)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+}
+
+/// Utility struct to get the name of the container image to use.
+///
+/// There are reasonable defaults, but for example on Raspberry Pi OS with a 64 bit
+/// kernel, Docker will still pull the 32 bit image but we want to use the 64 bit image.
+enum Container {
+    Suricata,
+    EveBox,
+}
+
+impl Container {
+    fn get_image_name(&self) -> String {
+        let machine = Uname::machine();
+        match self {
+            Self::Suricata => {
+                if let Some(machine) = machine {
+                    match machine.as_ref() {
+                        "aarch64" => {
+                            return format!("{}:{}", DEFAULT_SURICATA_IMAGE_BASE, "latest-arm64v8")
+                        }
+                        _ => {}
+                    }
+                }
+                return DEFAULT_SURICATA_IMAGE.to_string();
+            }
+            Self::EveBox => DEFAULT_EVEBOX_IMAGE.to_string(),
+        }
+    }
 }
 
 struct Context {
@@ -428,7 +475,10 @@ fn main_menu(context: &mut Context) -> Result<()> {
         println!("{}\n", &title);
 
         // Some errors.
-        if !context.runtime.image_exists(DEFAULT_SURICATA_IMAGE) {
+        if !context
+            .runtime
+            .image_exists(&Container::Suricata.get_image_name())
+        {
             term::print_err("Suricata container image does not exist. Run Update.");
         }
         if context.config.interface.is_none() {
@@ -546,7 +596,8 @@ fn start_evebox(context: &Context) -> Result<()> {
         args.push("--restart=unless-stopped");
     }
 
-    args.push(DEFAULT_EVEBOX_IMAGE);
+    let image_name = Container::EveBox.get_image_name();
+    args.push(&image_name);
 
     args.extend_from_slice(&[
         "evebox",
@@ -628,7 +679,8 @@ fn start_suricata(context: &Context) -> Result<()> {
         args.push("--restart=unless-stopped");
     }
 
-    args.push(DEFAULT_SURICATA_IMAGE);
+    let image_name = Container::Suricata.get_image_name();
+    args.push(&image_name);
     args.extend_from_slice(&["-k", "none"]);
     args.extend_from_slice(&["-i", context.config.interface.as_ref().unwrap()]);
 
@@ -696,7 +748,10 @@ fn rotate_logs(context: &Context) -> Result<()> {
 }
 
 fn update(context: &Context) -> Result<()> {
-    let images = &[DEFAULT_SURICATA_IMAGE, DEFAULT_EVEBOX_IMAGE];
+    let images = &[
+        Container::Suricata.get_image_name(),
+        Container::EveBox.get_image_name(),
+    ];
     for image in images {
         let args = vec![context.runtime.program_name(), "pull", image];
         let _ = Command::new(&args[0]).args(&args[1..]).status();
