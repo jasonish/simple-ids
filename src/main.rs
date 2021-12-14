@@ -26,7 +26,7 @@ use std::io::Write;
 use std::process::Command;
 
 use anyhow::Result;
-use clap::Clap;
+use clap::Parser;
 
 use crate::config::Config;
 use crate::container::ContainerRuntime;
@@ -52,8 +52,8 @@ const EVEBOX_CONTAINER_NAME: &str = "easy-evebox";
 
 const TITLE_PREFIX: &str = "Easy - Suricata/EveBox";
 
-#[derive(Clap, Debug, Clone)]
-#[clap(name = "easy-suricata", setting = clap::AppSettings::ColoredHelp)]
+#[derive(Parser, Debug, Clone)]
+#[clap(name = "easy-suricata")]
 struct Opts {
     /// Use Podman instead of Docker
     #[clap(long)]
@@ -67,7 +67,7 @@ struct Opts {
     command: Option<SubCommand>,
 }
 
-#[derive(Clap, Debug, Clone)]
+#[derive(Parser, Debug, Clone)]
 enum SubCommand {
     UpdateRules,
 }
@@ -112,6 +112,7 @@ impl Container {
         match self {
             Self::Suricata => {
                 if let Some(machine) = machine {
+                    #[allow(clippy::single_match)]
                     match machine.as_ref() {
                         "aarch64" => {
                             return format!("{}:{}", DEFAULT_SURICATA_IMAGE_BASE, "latest-arm64v8")
@@ -333,7 +334,7 @@ impl<'a> ConfigureMenu<'a> {
 
             print!("Select menu option: ");
             match term::read_line().as_ref() {
-                "1" => set_monitor_interface_menu(&mut self.context)?,
+                "1" => set_monitor_interface_menu(self.context)?,
                 "2" => self.toggle_evebox()?,
                 "3" => self.toggle_evebox_external_access()?,
                 "4" => self.set_bpf_filter()?,
@@ -722,8 +723,11 @@ fn start(context: &Context) -> Result<()> {
 
 fn update_rules(context: &Context) -> Result<()> {
     let args = &["exec", "-it", SURICATA_CONTAINER_NAME, "suricata-update"];
-    if let Err(_) = context.runtime.exec_status(args) {
-        error!("An error occurred while trying to update the rules.");
+    if let Err(err) = context.runtime.exec_status(args) {
+        error!(
+            "An error occurred while trying to update the rules: {}",
+            err
+        );
     }
     if context.interactive {
         term::prompt_for_enter();
