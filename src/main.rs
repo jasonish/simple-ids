@@ -213,6 +213,7 @@ fn main() -> Result<()> {
     // Podman requires root...
     if runtime == ContainerRuntime::Podman && ffi::getuid() != 0 {
         tracing::error!("The Podman container runtime requires running as root");
+        std::process::exit(1);
     }
 
     let interactive = opts.command.is_none();

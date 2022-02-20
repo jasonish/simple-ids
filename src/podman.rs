@@ -33,7 +33,7 @@ pub fn version() -> Result<String> {
         .output()
     {
         Ok(output) => {
-            if !output.stderr.is_empty() {
+            if !output.status.success() {
                 let err = String::from_utf8_lossy(&output.stderr).to_string();
                 bail!(err);
             }
