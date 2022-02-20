@@ -28,7 +28,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use sha2::{Digest, Sha256};
 use tempfile::tempfile;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 fn file_checksum(file: &mut File) -> Result<String> {
     let mut hash = Sha256::new();
@@ -64,10 +64,15 @@ pub fn self_update() -> Result<()> {
     };
 
     info!("Downloading {}", &hash_url);
-    let remote_hash = reqwest::blocking::get(&hash_url)?
-        .text()?
-        .trim()
-        .to_lowercase();
+    let response = reqwest::blocking::get(&hash_url)?;
+    if response.status().as_u16() != 200 {
+        error!(
+            "Failed to fetch remote checksum: HTTP status code={}",
+            response.status(),
+        );
+        return Ok(());
+    }
+    let remote_hash = response.text()?.trim().to_lowercase();
     debug!("Remote SHA256 checksum: {}", &remote_hash);
 
     match current_hash {
@@ -95,6 +100,7 @@ pub fn self_update() -> Result<()> {
     );
     if hash != remote_hash {
         tracing::error!("Downloaded file has invalid checksum, not updating");
+        tracing::error!("- Expected {}", remote_hash);
         return Ok(());
     }
 
