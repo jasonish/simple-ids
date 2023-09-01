@@ -2,7 +2,7 @@
 name = "easy"
 version = "0.1.0"
 authors = ["Jason Ish <ish@unx.ca>"]
-edition = "2018"
+edition = "2021"
 description = "Easy Suricata and EveBox using Containers"
 homepage = "https://github.com/jasonish/easy"
 
