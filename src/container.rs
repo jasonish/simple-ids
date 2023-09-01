@@ -108,7 +108,7 @@ impl ContainerRuntime {
     }
 
     pub fn last_log_line(&self, name: &str) -> Option<String> {
-        if let Ok((stdout, stderr)) = self.exec_output_stderr(&["logs", "--tail=1", name]) {
+        if let Ok((stdout, stderr)) = self.exec_output_stderr(["logs", "--tail=1", name]) {
             if !stderr.is_empty() {
                 return Some(stderr.trim().to_string());
             }

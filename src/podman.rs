@@ -29,7 +29,7 @@ fn output(args: &[&str]) -> std::io::Result<Output> {
 
 pub fn version() -> Result<String> {
     match Command::new("podman")
-        .args(&["version", "--format", "{{json .}}"])
+        .args(["version", "--format", "{{json .}}"])
         .output()
     {
         Ok(output) => {
@@ -50,7 +50,7 @@ pub fn version() -> Result<String> {
 }
 
 pub fn parse_json_output(args: &[&str]) -> Result<serde_json::Value> {
-    let output = Command::new(&args[0]).args(&args[1..]).output()?;
+    let output = Command::new(args[0]).args(&args[1..]).output()?;
     if !output.stderr.is_empty() {
         bail!(String::from_utf8_lossy(&output.stderr).to_string());
     }

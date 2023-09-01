@@ -270,7 +270,7 @@ impl<'a> DebugMenu<'a> {
         let _ = self
             .context
             .runtime
-            .exec_status(&["logs", "--tail=20", name]);
+            .exec_status(["logs", "--tail=20", name]);
         term::prompt_for_enter();
     }
 
@@ -279,7 +279,7 @@ impl<'a> DebugMenu<'a> {
         let _ = self
             .context
             .runtime
-            .exec_status(&["logs", "--tail=20", "--follow", name]);
+            .exec_status(["logs", "--tail=20", "--follow", name]);
     }
 }
 
@@ -464,7 +464,7 @@ impl<'a> ConfigureMenu<'a> {
 fn ensure_exists(path: &str) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     if !std::path::Path::new(&path).exists() {
-        std::fs::create_dir_all(&path)?;
+        std::fs::create_dir_all(path)?;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o2750))?;
     }
     Ok(())
@@ -537,7 +537,7 @@ fn main_menu(context: &mut Context) -> Result<()> {
 }
 
 fn shell(context: &Context) -> Result<()> {
-    let ps1 = r#"PS1=\[\033[1;36m\]easy-suricata \[\033[1;34m\]\w\[\033[0;35m\] \[\033[1;36m\]# \[\033[0m\]"#;
+    let ps1 = r"PS1=\[\033[1;36m\]easy-suricata \[\033[1;34m\]\w\[\033[0;35m\] \[\033[1;36m\]# \[\033[0m\]";
     let mut args = vec![context.runtime.program_name()];
     args.extend_from_slice(&[
         "exec",
@@ -547,7 +547,7 @@ fn shell(context: &Context) -> Result<()> {
         SURICATA_CONTAINER_NAME,
         "/bin/bash",
     ]);
-    match Command::new(&args[0]).args(&args[1..]).status() {
+    match Command::new(args[0]).args(&args[1..]).status() {
         Ok(status) => {
             if !status.success() {
                 term::prompt_for_enter();
@@ -745,7 +745,7 @@ fn rotate_logs(context: &Context) -> Result<()> {
         "-vf",
         "/etc/logrotate.conf",
     ];
-    let _ = context.runtime.exec_status(&args);
+    let _ = context.runtime.exec_status(args);
     if context.interactive {
         term::prompt_for_enter();
     }
@@ -758,8 +758,8 @@ fn update(context: &Context) -> Result<()> {
         Container::EveBox.get_image_name(),
     ];
     for image in images {
-        let args = vec![context.runtime.program_name(), "pull", image];
-        let _ = Command::new(&args[0]).args(&args[1..]).status();
+        let args = [context.runtime.program_name(), "pull", image];
+        let _ = Command::new(args[0]).args(&args[1..]).status();
     }
     update::self_update()?;
     term::dummy_prompt("Press ENTER to continue:");
@@ -768,7 +768,7 @@ fn update(context: &Context) -> Result<()> {
 
 fn stop_container(context: &Context, name: &str) -> Result<()> {
     let args = vec!["rm", "-f", name];
-    context.runtime.exec_output(&args)?;
+    context.runtime.exec_output(args)?;
     Ok(())
 }
 
