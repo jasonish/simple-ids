@@ -1,10 +1,11 @@
 [package]
-name = "easy"
+name = "nsmbox"
 version = "0.1.0"
-authors = ["Jason Ish <ish@unx.ca>"]
+authors = ["Jason Ish <jason@codemonkey.net>"]
 edition = "2021"
 description = "Easy Suricata and EveBox using Containers"
-homepage = "https://github.com/jasonish/easy"
+homepage = "https://github.com/EveBox/nsmbox"
+license = "MIT"
 
 # Some tweaks to reduce binary size.
 [profile.release]

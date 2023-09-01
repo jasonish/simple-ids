@@ -187,26 +187,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "easy"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "libc",
- "os-release",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tempfile",
- "termcolor",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "encoding_rs"
 version = "0.8.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -577,6 +557,26 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys",
+]
+
+[[package]]
+name = "nsmbox"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "libc",
+ "os-release",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "termcolor",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
