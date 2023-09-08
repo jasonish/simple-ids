@@ -1,33 +1,32 @@
 // SPDX-FileCopyrightText: (C) 2021 Jason Ish <jason@codemonkey.net>
 // SPDX-License-Identifier: MIT
 
-use std::fs::File;
-use std::io::{Seek, SeekFrom};
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::{
+    fs::{File, self},
+    io::{Seek, SeekFrom, self},
+    os::unix::prelude::PermissionsExt,
+    path::Path, process, env,
+};
 
 use anyhow::{bail, Result};
 use sha2::{Digest, Sha256};
-use tempfile::tempfile;
 use tracing::{debug, error, info, warn};
 
-fn file_checksum(file: &mut File) -> Result<String> {
-    let mut hash = Sha256::new();
-    std::io::copy(file, &mut hash)?;
-    let hash = hash.finalize();
-    Ok(format!("{:x}", hash))
-}
+// Ok, the return type is a bit odd as this handles a lot of the error
+// handling itself. An `Err` is an error that should be logged by the
+// caller.  Ok(true) is success, but Ok(false) is an error that was
+// logged by this function.
+pub(crate) fn self_update() -> Result<()> {
+    // If we're running from cargo, don't self update.
+    if env::var("CARGO").is_ok() {
+        info!("Not self updating as we are running from Cargo");
+        return Ok(());
+    }
 
-fn current_checksum(path: &Path) -> Result<String> {
-    let mut file = std::fs::File::open(path)?;
-    file_checksum(&mut file)
-}
-
-pub fn self_update() -> Result<()> {
-    let target = std::env!("TARGET");
-    let url = format!("https://evebox.org/files/easy/{}/easy", target);
+    let target = env!("TARGET");
+    let url = format!("https://evebox.org/files/simplensm/{}/simplensm", target);
     let hash_url = format!("{}.sha256", url);
-    let current_exe = if let Ok(exe) = std::env::current_exe() {
+    let current_exe = if let Ok(exe) = env::current_exe() {
         exe
     } else {
         bail!("Failed to determine executable name, cannot self-update");
@@ -87,24 +86,36 @@ pub fn self_update() -> Result<()> {
 
     info!("Replacing current executable");
     download_exe.seek(SeekFrom::Start(0))?;
-    if let Err(err) = std::fs::remove_file(&current_exe) {
+    if let Err(err) = fs::remove_file(&current_exe) {
         tracing::warn!(
             "Failed to remove current exe: {}: {}",
             current_exe.display(),
             err
         );
     }
-    let mut final_exec = std::fs::File::create(&current_exe)?;
-    std::io::copy(&mut download_exe, &mut final_exec)?;
-    std::fs::set_permissions(&current_exe, std::fs::Permissions::from_mode(0o0755))?;
-    warn!("The Easy program has been updated. Please restart.");
-    std::process::exit(0);
+    let mut final_exec = fs::File::create(&current_exe)?;
+    io::copy(&mut download_exe, &mut final_exec)?;
+    fs::set_permissions(&current_exe, fs::Permissions::from_mode(0o0755))?;
+    warn!("The SimleNSM program has been updated. Please restart.");
+    process::exit(0);
 }
 
 fn download_release(url: &str) -> Result<File> {
     let mut response = reqwest::blocking::get(url)?;
-    let mut dest = tempfile()?;
-    std::io::copy(&mut response, &mut dest)?;
+    let mut dest = tempfile::tempfile()?;
+    io::copy(&mut response, &mut dest)?;
     dest.seek(SeekFrom::Start(0))?;
     Ok(dest)
+}
+
+fn file_checksum(file: &mut File) -> Result<String> {
+    let mut hash = Sha256::new();
+    io::copy(file, &mut hash)?;
+    let hash = hash.finalize();
+    Ok(format!("{:x}", hash))
+}
+
+fn current_checksum(path: &Path) -> Result<String> {
+    let mut file = fs::File::open(path)?;
+    file_checksum(&mut file)
 }

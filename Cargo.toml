@@ -1,10 +1,10 @@
 [package]
-name = "nsmbox"
-version = "0.1.0"
+name = "simplensm"
+version = "0.2.0"
 authors = ["Jason Ish <jason@codemonkey.net>"]
 edition = "2021"
-description = "Easy Suricata and EveBox using Containers"
-homepage = "https://github.com/EveBox/nsmbox"
+description = "SimpleNSM with Suricata and EveBox"
+homepage = "https://github.com/jasonish/simplensm"
 license = "MIT"
 
 # Some tweaks to reduce binary size.
@@ -15,16 +15,22 @@ codegen-units = 1
 
 [dependencies]
 anyhow = "1.0.75"
-regex = "1.9.4"
+clap = { version = "4.4.2", features = ["derive", "color"] }
+colored = "2.0.4"
+crossterm = "0.27.0"
+ctrlc = "3.4.1"
+inquire = "0.6.2"
+is-terminal = "0.4.9"
+libc = "0.2.147"
+regex = "1.9.5"
+reqwest = { version = "0.11.20", default_features = false, features = ["blocking", "rustls-tls"] }
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = "1.0.105"
 serde_yaml = "0.9.25"
-clap = { version = "3.2.23", features = ["derive", "color"] }
-os-release = "0.1.0"
-tracing = { version = "0.1.37", default_features = false, features = [] }
-tracing-subscriber = { version = "0.3.17", default_features = false, features = ["fmt", "ansi", "env-filter"] }
-libc = "0.2.147"
-termcolor = "1.2.0"
 sha2 = "0.10.7"
-reqwest = { version = "0.11.20", default_features = false, features = ["blocking", "rustls-tls"] }
 tempfile = "3.8.0"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
+
+# os-release = "0.1.0"
+# termcolor = "1.2.0"

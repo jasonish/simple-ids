@@ -1,823 +1,707 @@
 // SPDX-FileCopyrightText: (C) 2021 Jason Ish <jason@codemonkey.net>
 // SPDX-License-Identifier: MIT
 
-#![allow(clippy::needless_return)]
+use std::{
+    io::{BufRead, BufReader, Read, Write},
+    process::{self, Stdio},
+    sync::mpsc::Sender,
+    thread,
+};
 
-use std::io::Write;
-use std::process::Command;
+use anyhow::{bail, Result};
+use clap::{Parser, Subcommand};
+use colored::Colorize;
+use config::Config;
+use container::{Container, ContainerManager, SuricataContainer};
+use tracing::{error, info, warn, Level, debug};
 
-use anyhow::Result;
-use clap::Parser;
-
-use crate::config::Config;
-use crate::container::ContainerRuntime;
-use crate::term::dummy_prompt;
-
-use tracing::{error, info};
-
-#[macro_use]
-mod term;
+mod actions;
 mod config;
 mod container;
-mod docker;
-mod ffi;
-mod podman;
-mod update;
+mod menu;
+mod menus;
+mod prompt;
+mod selfupdate;
+mod system;
+mod term;
 
-const DEFAULT_SURICATA_IMAGE_BASE: &str = "docker.io/jasonish/suricata";
-const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
-const SURICATA_CONTAINER_NAME: &str = "easy-suricata";
+const SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:7.0";
+const EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
 
-const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
-const EVEBOX_CONTAINER_NAME: &str = "easy-evebox";
+const SURICATA_CONTAINER_NAME: &str = "simplensm-suricata";
+const EVEBOX_CONTAINER_NAME: &str = "simplensm-evebox";
 
-const TITLE_PREFIX: &str = "Easy - Suricata/EveBox";
+const SURICATA_VOLUME_LOG: &str = "simplensm-suricata-log";
+const SURICATA_VOLUME_LIB: &str = "simplensm-suricata-lib";
+const SURICATA_VOLUME_RUN: &str = "simplensm-suricata-run";
 
-#[derive(Parser, Debug, Clone)]
-#[clap(name = "easy-suricata")]
-struct Opts {
-    /// Use Podman instead of Docker
-    #[clap(long)]
+const EVEBOX_VOLUME_LIB: &str = "simplensm-evebox-lib";
+
+#[derive(Parser, Debug)]
+struct Args {
+    /// Use Podman, by default Docker is used if found
+    #[arg(long)]
     podman: bool,
 
-    /// Enable debug output
-    #[clap(short, long, parse(from_occurrences))]
-    verbose: i32,
+    #[arg(long, short, global = true, action = clap::ArgAction::Count)]
+    verbose: u8,
 
-    #[clap(subcommand)]
-    command: Option<SubCommand>,
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
-#[derive(Parser, Debug, Clone)]
-enum SubCommand {
+#[derive(Subcommand, Debug)]
+enum Commands {
+    Start {
+        #[arg(long, short)]
+        detach: bool,
+    },
+    Stop,
+    Status,
     UpdateRules,
-}
+    Update,
 
-enum Volume {
-    Log,
-    Run,
-    Lib,
-    Etc,
-    EveBoxData,
-}
-
-struct Uname {}
-
-impl Uname {
-    fn machine() -> Option<String> {
-        if let Ok(output) = Command::new("uname").args(["-m"]).output() {
-            if let Ok(mut stdout) = String::from_utf8(output.stdout) {
-                stdout.retain(|c| !c.is_ascii_whitespace());
-                Some(stdout)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-}
-
-/// Utility struct to get the name of the container image to use.
-///
-/// There are reasonable defaults, but for example on Raspberry Pi OS with a 64 bit
-/// kernel, Docker will still pull the 32 bit image but we want to use the 64 bit image.
-enum Container {
-    Suricata,
-    EveBox,
-}
-
-impl Container {
-    fn get_image_name(&self) -> String {
-        let machine = Uname::machine();
-        match self {
-            Self::Suricata => {
-                if let Some(machine) = machine {
-                    #[allow(clippy::single_match)]
-                    match machine.as_ref() {
-                        "aarch64" => {
-                            return format!("{}:{}", DEFAULT_SURICATA_IMAGE_BASE, "latest-arm64v8")
-                        }
-                        _ => {}
-                    }
-                }
-                return DEFAULT_SURICATA_IMAGE.to_string();
-            }
-            Self::EveBox => DEFAULT_EVEBOX_IMAGE.to_string(),
-        }
-    }
+    // Commands to jump to specific menus.
+    ConfigureMenu,
 }
 
 struct Context {
     config: Config,
-    runtime: ContainerRuntime,
-    interactive: bool,
+    manager: ContainerManager,
 }
 
-impl Context {
-    fn get_volume_config(&self, volume: Volume) -> String {
-        let source = self.get_volume_source(&volume);
-        match volume {
-            Volume::Etc => format!("--volume={}:/etc/suricata", source),
-            Volume::Run => format!("--volume={}:/run/suricata", source),
-            Volume::Lib => format!("--volume={}:/var/lib/suricata", source),
-            Volume::EveBoxData => format!("--volume={}:/data", source),
-            Volume::Log => format!("--volume={}:/var/log/suricata", source),
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Mainly for use when developing...
+    let _ = std::process::Command::new("stty").args(["sane"]).status();
+
+    let args = Args::parse();
+
+    let log_level = if args.verbose > 0 {
+        Level::DEBUG
+    } else {
+        Level::INFO
+    };
+    tracing_subscriber::fmt().with_max_level(log_level).init();
+
+    let config = config::Config::new();
+
+    let manager = match container::find_manager() {
+        Some(manager) => manager,
+        None => {
+            error!("No container manager found. Docker or Podman must be available.");
+            error!("See https://evebox.org/runtimes/ for more info.");
+            std::process::exit(1);
+        }
+    };
+    if manager == container::ContainerManager::Podman && system::getuid() != 0 {
+        error!("The Podman container manager requires running as root");
+        std::process::exit(1);
+    }
+    debug!("Found container manager {manager}");
+
+    let mut context = Context { config, manager };
+
+    if let Some(command) = args.command {
+        let code = match command {
+            Commands::Start { detach } => command_start(&context, detach),
+            Commands::Stop => {
+                if stop(&context) {
+                    0
+                } else {
+                    1
+                }
+            }
+            Commands::Status => command_status(&context),
+            Commands::UpdateRules => {
+                if actions::update_rules(&context).is_ok() {
+                    0
+                } else {
+                    1
+                }
+            }
+            Commands::Update => {
+                if update(&context) {
+                    0
+                } else {
+                    1
+                }
+            }
+            Commands::ConfigureMenu => {
+                menu::configure::main(&mut context);
+                0
+            }
+        };
+        std::process::exit(code);
+    } else {
+        menu_main(context);
+    }
+
+    Ok(())
+}
+
+fn process_output_handler<R: Read + Sync + Send + 'static>(
+    output: R,
+    label: &'static str,
+    tx: Sender<bool>,
+) {
+    let reader = BufReader::new(output).lines();
+    thread::spawn(move || {
+        for line in reader {
+            if let Ok(line) = line {
+                // Add some coloring to the Suricata output as it
+                // doesn't add its own color when writing to a
+                // non-interactive terminal.
+                let line = if line.starts_with("Info") {
+                    line.green().to_string()
+                } else if line.starts_with("Error") {
+                    line.red().to_string()
+                } else if line.starts_with("Notice") {
+                    line.magenta().to_string()
+                } else if line.starts_with("Warn") {
+                    line.yellow().to_string()
+                } else {
+                    line.to_string()
+                };
+                let mut stdout = std::io::stdout().lock();
+                let _ = writeln!(&mut stdout, "{}: {}", label, line);
+                let _ = stdout.flush();
+            } else {
+                debug!("{}: EOF", label);
+                break;
+            }
+        }
+        let _ = tx.send(true);
+    });
+}
+
+/// Run when "start" is run from the command line.
+fn command_start(context: &Context, detach: bool) -> i32 {
+    if detach {
+        start(context);
+        0
+    } else {
+        start_foreground(context)
+    }
+}
+
+/// Start SimpleNSM in the foreground.
+///
+/// Typically not done from the menus but instead the command line.
+fn start_foreground(context: &Context) -> i32 {
+    context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
+    context.manager.quiet_rm(EVEBOX_CONTAINER_NAME);
+
+    let (tx, rx) = std::sync::mpsc::channel::<bool>();
+    let mut suricata_command = match build_suricata_command(context, false) {
+        Ok(command) => command,
+        Err(err) => {
+            error!("Invalid Suricata configuration: {}", err);
+            return 1;
+        }
+    };
+
+    let mut suricata_process = match suricata_command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(process) => process,
+        Err(err) => {
+            error!("Failed to spawn Suricata process: {}", err);
+            return 1;
+        }
+    };
+
+    let mut evebox_command = build_evebox_command(context, false);
+    let mut evebox_process = match evebox_command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(process) => process,
+        Err(err) => {
+            error!("Failed to spawn EveBox process: {}", err);
+            return 1;
+        }
+    };
+
+    {
+        let tx = tx.clone();
+        if let Err(err) = ctrlc::set_handler(move || {
+            info!("Received Ctrl-C, stopping containers");
+            let _ = tx.send(true);
+        }) {
+            error!("Failed to setup Ctrl-C handler: {}", err);
         }
     }
 
-    fn get_volume_source(&self, volume: &Volume) -> String {
-        let data_directory = if let Some(dir) = &self.config.data_directory {
-            format!("{}/", dir)
-        } else {
-            "".to_string()
-        };
-        let source = match volume {
-            Volume::Etc => format!("{}--etc", SURICATA_CONTAINER_NAME),
-            Volume::Run => format!("{}--run", SURICATA_CONTAINER_NAME),
-            Volume::Lib => format!("{}--lib", SURICATA_CONTAINER_NAME),
-            Volume::Log => format!("{}{}--log", &data_directory, SURICATA_CONTAINER_NAME),
-            Volume::EveBoxData => format!("{}{}--data", &data_directory, EVEBOX_CONTAINER_NAME),
+    let now = std::time::Instant::now();
+    loop {
+        if !context.manager.is_running(SURICATA_CONTAINER_NAME) {
+            if now.elapsed().as_secs() > 3 {
+                error!("Timed out waiting for the Suricata container to start running, not starting log rotation");
+                break;
+            } else {
+                continue;
+            }
+        }
+
+        if let Err(err) = start_suricata_logrotate(context) {
+            error!("Failed to start Suricata log rotation: {err}");
+        }
+        break;
+    }
+
+    if let Some(output) = suricata_process.stdout.take() {
+        process_output_handler(output, "suricata", tx.clone());
+    }
+    if let Some(output) = suricata_process.stderr.take() {
+        process_output_handler(output, "suricata", tx.clone());
+    }
+
+    if let Some(output) = evebox_process.stdout.take() {
+        process_output_handler(output, "evebox", tx.clone());
+    }
+    if let Some(output) = evebox_process.stderr.take() {
+        process_output_handler(output, "evebox", tx.clone());
+    }
+
+    let _ = rx.recv();
+    let _ = context.manager.stop(SURICATA_CONTAINER_NAME, None);
+    let _ = context.manager.stop(EVEBOX_CONTAINER_NAME, Some("SIGINT"));
+    let status = suricata_process.wait();
+    debug!("Suricata exit status: {:?}", status);
+    let status = evebox_process.wait();
+    debug!("EveBox exit status: {:?}", status);
+    0
+}
+
+fn stop(context: &Context) -> bool {
+    let mut ok = true;
+
+    if context.manager.exists(SURICATA_CONTAINER_NAME) {
+        info!("Stopping {SURICATA_CONTAINER_NAME}");
+        if let Err(err) = context.manager.stop(SURICATA_CONTAINER_NAME, None) {
+            error!(
+                "Failed to stop container {SURICATA_CONTAINER_NAME}: {}",
+                err
+            );
+            ok = false;
+        }
+        context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
+    } else {
+        info!("Container {SURICATA_CONTAINER_NAME} is not running");
+    }
+    if context.manager.exists(EVEBOX_CONTAINER_NAME) {
+        info!("Stopping {EVEBOX_CONTAINER_NAME}");
+        if let Err(err) = context.manager.stop(EVEBOX_CONTAINER_NAME, Some("SIGINT")) {
+            error!("Failed to stop container {EVEBOX_CONTAINER_NAME}: {}", err);
+            ok = false;
+        }
+        context.manager.quiet_rm(EVEBOX_CONTAINER_NAME);
+    } else {
+        info!("Container {EVEBOX_CONTAINER_NAME} is not running");
+    }
+
+    ok
+}
+
+fn command_status(context: &Context) -> i32 {
+    let mut code = 0;
+    match context.manager.state(SURICATA_CONTAINER_NAME) {
+        Ok(state) => info!("suricata: {}", state.status),
+        Err(err) => {
+            warn!("suricata: {}", err);
+            code = 1;
+        }
+    }
+    match context.manager.state(EVEBOX_CONTAINER_NAME) {
+        Ok(state) => info!("evebox: {}", state.status),
+        Err(err) => {
+            warn!("evebox: {}", err);
+            code = 1;
+        }
+    }
+    code
+}
+
+fn guess_evebox_url(context: &Context) -> String {
+    let scheme = if context.config.evebox.no_tls {
+        "http"
+    } else {
+        "https"
+    };
+
+    if !context.config.evebox.allow_remote {
+        format!("{}://127.0.0.1:5636", scheme)
+    } else {
+        let interfaces = match system::get_interfaces() {
+            Ok(interfaces) => interfaces,
+            Err(err) => {
+                error!("Failed to get system interfaces: {err}");
+                return format!("{}://127.0.0.1:5636", scheme);
+            }
         };
 
-        // If source is a real path, try to make sure it exists (required for Podman).
-        if source.starts_with('/') {
-            if let Err(err) = ensure_exists(&source) {
-                match self.runtime {
-                    ContainerRuntime::Docker => {}
-                    ContainerRuntime::Podman => {
-                        tracing::error!("Failed to create directory {}: {}", source, err);
+        // Find the first interface that is up...
+        let mut addr: Option<&String> = None;
+
+        for interface in &interfaces {
+            // Only consider IPv4 addresses for now.
+            if interface.addr4.is_empty() {
+                continue;
+            }
+            if interface.name == "lo" && addr.is_none() {
+                addr = interface.addr4.first();
+            } else if interface.status == "UP" {
+                match addr {
+                    Some(previous) => {
+                        if previous.starts_with("127") {
+                            addr = interface.addr4.first();
+                        }
+                    }
+                    None => {
+                        addr = interface.addr4.first();
                     }
                 }
             }
         }
 
-        source
+        format!(
+            "{}://{}:5636",
+            scheme,
+            addr.unwrap_or(&"127.0.0.1".to_string())
+        )
     }
 }
 
-fn init_logging(opts: &Opts) {
-    let level = if opts.verbose > 1 {
-        tracing::Level::TRACE
-    } else if opts.verbose > 0 {
-        tracing::Level::DEBUG
-    } else {
-        tracing::Level::INFO
-    };
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_env_filter(format!(
-            "{},hyper=off,warp=off",
-            &level.to_string().to_lowercase()
-        ))
-        .init();
-}
+fn menu_main(mut context: Context) {
+    loop {
+        term::clear_title("SimpleNSM: Main Menu");
 
-fn main() -> Result<()> {
-    let opts: Opts = Opts::parse();
-    init_logging(&opts);
+        let evebox_url = guess_evebox_url(&context);
 
-    let config = config::Config::new();
-
-    let runtime = match container::find_runtime(opts.podman) {
-        None => {
-            tracing::error!("No container runtime found. Docker or Podman must be available.");
-            tracing::error!("See https://evebox.org/runtimes/ for more info.");
-            std::process::exit(1);
-        }
-        Some(runtime) => {
-            tracing::info!("Found container runtime: {}", runtime.program_name());
-            runtime
-        }
-    };
-
-    // Podman requires root...
-    if runtime == ContainerRuntime::Podman && ffi::getuid() != 0 {
-        tracing::error!("The Podman container runtime requires running as root");
-        std::process::exit(1);
-    }
-
-    let interactive = opts.command.is_none();
-    let mut context = Context {
-        config,
-        runtime,
-        interactive,
-    };
-
-    match &opts.command {
-        None => main_menu(&mut context)?,
-        Some(sub) => match sub {
-            SubCommand::UpdateRules => update_rules(&context)?,
-        },
-    }
-    Ok(())
-}
-
-fn version() -> &'static str {
-    std::env!("CARGO_PKG_VERSION")
-}
-
-struct DebugMenu<'a> {
-    context: &'a Context,
-}
-
-impl<'a> DebugMenu<'a> {
-    fn new(context: &'a Context) -> Self {
-        Self { context }
-    }
-
-    fn run(&self) -> Result<()> {
-        loop {
-            println!("1. View last 20 lines of Suricata log");
-            println!("2. View last 20 lines of EveBox log");
-            println!("3. Tail Suricata log");
-            println!("4. Tail EveBox log");
-            println!("x. Exit");
-            println!();
-            print!("Select menu option: ");
-            match term::read_line().as_ref() {
-                "1" => self.last_n(SURICATA_CONTAINER_NAME),
-                "2" => self.last_n(EVEBOX_CONTAINER_NAME),
-                "3" => self.tail(SURICATA_CONTAINER_NAME),
-                "4" => self.tail(EVEBOX_CONTAINER_NAME),
-                "x" => break,
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn last_n(&self, name: &str) {
-        let _ = self
-            .context
-            .runtime
-            .exec_status(["logs", "--tail=20", name]);
-        term::prompt_for_enter();
-    }
-
-    fn tail(&self, name: &str) {
-        dummy_prompt("Hit CTRL-C to exit. This will return you to the shell, not this program: ");
-        let _ = self
-            .context
-            .runtime
-            .exec_status(["logs", "--tail=20", "--follow", name]);
-    }
-}
-
-struct ConfigureMenu<'a> {
-    context: &'a mut Context,
-}
-
-impl<'a> ConfigureMenu<'a> {
-    fn new(context: &'a mut Context) -> Self {
-        Self { context }
-    }
-
-    fn run(&mut self) -> Result<()> {
-        loop {
-            let interface = self
-                .context
-                .config
-                .interface
-                .as_ref()
-                .unwrap_or(&"none".to_string())
-                .to_string();
-
-            println!("1. Set Interface [{}]", interface);
-            if self.context.config.evebox.enabled {
-                println!("2. Disable EveBox");
-            } else {
-                println!("2. Enable EveBox");
-            }
-            if self.context.config.evebox.allow_external {
-                println!("3. EveBox: Disable External Access (currently enabled)");
-            } else {
-                println!("3. EveBox: Enable External Access (currently disabled)");
-            };
-            println!(
-                "4. BPF Filter: {}",
-                if let Some(bpf) = &self.context.config.bpf_filter {
-                    bpf
+        let suricata_state = context
+            .manager
+            .state(SURICATA_CONTAINER_NAME)
+            .map(|state| state.status)
+            .unwrap_or_else(|_| "not running".to_string());
+        let evebox_state = context
+            .manager
+            .state(EVEBOX_CONTAINER_NAME)
+            .map(|state| {
+                if state.status == "running" {
+                    format!("{} {}", state.status, evebox_url,)
                 } else {
-                    "(not set)"
+                    state.status
                 }
-            );
-            println!("5. Start on Boot: {}", self.context.config.start_on_boot);
-            println!(
-                "6. Data Directory: {}",
-                self.context
-                    .config
-                    .data_directory
-                    .as_ref()
-                    .unwrap_or(&"(none)".to_string())
-            );
-            println!("x. Exit");
-            println!();
+            })
+            .unwrap_or_else(|_| "not running".to_string());
 
-            print!("Select menu option: ");
-            match term::read_line().as_ref() {
-                "1" => set_monitor_interface_menu(self.context)?,
-                "2" => self.toggle_evebox()?,
-                "3" => self.toggle_evebox_external_access()?,
-                "4" => self.set_bpf_filter()?,
-                "5" => self.toggle_start_on_boot()?,
-                "6" => self.set_data_directory()?,
-                "x" => break,
-                _ => {}
-            }
-        }
-        Ok(())
-    }
+        let running = context.manager.is_running(SURICATA_CONTAINER_NAME)
+            || context.manager.is_running(EVEBOX_CONTAINER_NAME);
 
-    fn toggle_start_on_boot(&mut self) -> Result<()> {
-        if self.context.runtime == ContainerRuntime::Podman {
-            term::print_err("Start on boot is not supported with Podman yet.");
-            term::prompt_for_enter();
-            return Ok(());
-        }
-        self.context.config.start_on_boot = !self.context.config.start_on_boot;
-        self.context.config.save(None)?;
-        Ok(())
-    }
-
-    fn set_bpf_filter(&mut self) -> Result<()> {
-        print!("Enter new BPF filter: ");
-        let filter = term::read_line();
-        if filter.is_empty() {
-            self.context.config.bpf_filter = None;
-        } else {
-            self.context.config.bpf_filter = Some(filter);
-        }
-        self.context.config.save(None)?;
-        Ok(())
-    }
-
-    fn set_data_directory(&mut self) -> Result<()> {
-        if ffi::getuid() != 0 {
-            println!();
-            println!("NOTE: It is possible to use a directory that may not be writable");
-            println!("      by the user running easy. If so, create the directory");
-            println!("      then come back and configure it here.");
-        }
-        print!("Enter data directory: ");
-        let directory = term::read_line();
-        if directory.is_empty() {
-            self.context.config.data_directory = None;
-        } else {
-            if let Err(err) = ensure_exists(&directory) {
-                tracing::error!("Failed to set data directory: {}: {}", &directory, err);
-                return Ok(());
-            }
-            match std::fs::canonicalize(&directory) {
-                Ok(path) => {
-                    self.context.config.data_directory = Some(path.to_str().unwrap().to_string());
-                }
-                Err(err) => {
-                    tracing::error!("Bad directory: {}", err);
-                }
-            }
-        }
-        self.context.config.save(None)?;
-        Ok(())
-    }
-
-    fn toggle_evebox_external_access(&mut self) -> Result<()> {
-        self.context.config.evebox.allow_external = !self.context.config.evebox.allow_external;
-        self.context.config.save(None)?;
-        if self
-            .context
-            .runtime
-            .container_running(EVEBOX_CONTAINER_NAME)
-        {
-            tracing::info!("Restarting EveBox...");
-            if let Err(err) = stop_evebox(self.context) {
-                tracing::error!("Failed to stop EveBox: {}", err);
-            }
-            if let Err(err) = start_evebox(self.context) {
-                tracing::error!("Failed to start EveBox: {}", err);
-            }
-        }
-        Ok(())
-    }
-
-    fn toggle_evebox(&mut self) -> Result<()> {
-        if self.context.config.evebox.enabled {
-            self.context.config.evebox.enabled = false;
-        } else {
-            println!();
-            println!("WARNING: EveBox runs without authentication at this time.");
-            println!();
-            print!("Are you sure you want to enable Evebox [N/y]? ");
-            match term::read_line().to_lowercase().as_ref() {
-                "y" | "yes" => {
-                    self.context.config.evebox.enabled = true;
-                }
-                _ => return Ok(()),
-            }
-        }
-
-        // If EveBox is now disabled, stop it. But if is now enabled, start it if Suricata is
-        // currently running.
-        if self.context.config.evebox.enabled {
-            if self
-                .context
-                .runtime
-                .container_running(SURICATA_CONTAINER_NAME)
-                && !self
-                    .context
-                    .runtime
-                    .container_running(EVEBOX_CONTAINER_NAME)
-            {
-                let _ = start_evebox(self.context);
-            }
-        } else if self
-            .context
-            .runtime
-            .container_running(EVEBOX_CONTAINER_NAME)
-        {
-            let _ = stop_evebox(self.context);
-        }
-        self.context.config.save(None)?;
-        Ok(())
-    }
-}
-
-fn ensure_exists(path: &str) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    if !std::path::Path::new(&path).exists() {
-        std::fs::create_dir_all(path)?;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o2750))?;
-    }
-    Ok(())
-}
-
-fn main_menu(context: &mut Context) -> Result<()> {
-    let title = format!("{} - Main Menu (v: {})", TITLE_PREFIX, version());
-
-    loop {
-        println!("{}\n", &title);
-
-        // Some errors.
-        if !context
-            .runtime
-            .image_exists(&Container::Suricata.get_image_name())
-        {
-            term::print_err("Suricata container image does not exist. Run Update.");
-        }
-        if context.config.interface.is_none() {
-            term::print_err("No interface selected, choose Configure.");
-        }
-
-        // Some status...
-        if context.runtime.container_running(SURICATA_CONTAINER_NAME) {
-            term::print_status("Suricata", "running");
-        } else {
-            term::print_status("Suricata", "not running");
-        }
-        if let Some(output) = context.runtime.last_log_line(SURICATA_CONTAINER_NAME) {
-            term::print_status("Suricata", &output);
-        }
-
-        if !context.config.evebox.enabled {
-            term::print_status("EveBox", "not enabled");
-        } else if context.runtime.container_running(EVEBOX_CONTAINER_NAME) {
-            term::print_status("EveBox", "running");
-        } else {
-            term::print_status("EveBox", "not running");
-        }
-
-        println!();
-
-        println!("1. Start");
-        println!("2. Stop");
-        println!("3. Restart");
-        println!("4. Update Rules");
-        println!("5. Shell");
-        println!("6. Force Log Rotation");
-        println!("7. Update");
-        println!("8. Configure");
-        println!("9. Debug");
-        println!("x. Exit");
-        println!();
-        print!("Select menu option: ");
-        match term::read_line().as_ref() {
-            "1" => start(context)?,
-            "2" => stop(context)?,
-            "3" => restart(context)?,
-            "4" => update_rules(context)?,
-            "5" => shell(context)?,
-            "6" => rotate_logs(context)?,
-            "7" => update(context)?,
-            "8" => ConfigureMenu::new(context).run()?,
-            "9" => DebugMenu::new(context).run()?,
-            "x" => break,
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
-fn shell(context: &Context) -> Result<()> {
-    let ps1 = r"PS1=\[\033[1;36m\]easy-suricata \[\033[1;34m\]\w\[\033[0;35m\] \[\033[1;36m\]# \[\033[0m\]";
-    let mut args = vec![context.runtime.program_name()];
-    args.extend_from_slice(&[
-        "exec",
-        "-it",
-        "-e",
-        ps1,
-        SURICATA_CONTAINER_NAME,
-        "/bin/bash",
-    ]);
-    match Command::new(args[0]).args(&args[1..]).status() {
-        Ok(status) => {
-            if !status.success() {
-                term::prompt_for_enter();
-            }
-        }
-        Err(err) => {
-            eprintln!("ERROR: Failed to execute {}: {}", &args[0], err);
-            term::prompt_for_enter();
-        }
-    }
-    Ok(())
-}
-
-fn restart(context: &Context) -> Result<()> {
-    let _ = stop(context);
-    let _ = start(context);
-    Ok(())
-}
-
-fn start_evebox(context: &Context) -> Result<()> {
-    let mut args = vec!["run", "-d", "--name", EVEBOX_CONTAINER_NAME];
-
-    if context.config.evebox.allow_external {
-        args.push("--publish=0.0.0.0:5636:5636");
-    } else {
-        args.push("--publish=127.0.0.1:5636:5636");
-    }
-
-    if context.runtime.requires_privilege() {
-        args.push("--privileged");
-    }
-
-    // If we have /etc/localtime, provide it as a read-only volume.
-    if std::path::Path::new("/etc/localtime").exists() {
-        args.push("--volume=/etc/localtime:/etc/localtime:ro");
-    }
-
-    // The Suricata log volume.
-    let log_vol = context.get_volume_config(Volume::Log);
-    args.push(&log_vol);
-
-    // EveBox data directory.
-    let data_vol = context.get_volume_config(Volume::EveBoxData);
-    args.push(&data_vol);
-
-    // Restart policy.
-    if context.runtime == ContainerRuntime::Docker && context.config.start_on_boot {
-        args.push("--restart=unless-stopped");
-    }
-
-    let image_name = Container::EveBox.get_image_name();
-    args.push(&image_name);
-
-    args.extend_from_slice(&[
-        "evebox",
-        "-D",
-        "/data",
-        "server",
-        "--input",
-        "/var/log/suricata/eve.json",
-        "--datastore",
-        "sqlite",
-    ]);
-    tracing::info!("Starting EveBox");
-    tracing::debug!(
-        "Executing: {} {}",
-        context.runtime.program_name(),
-        args.join(" ")
-    );
-    if let Err(err) = context.runtime.exec_output(&args) {
-        tracing::error!("Failed to start EveBox: {}", err);
-    }
-    Ok(())
-}
-
-fn start_suricata(context: &Context) -> Result<()> {
-    if context.config.interface.is_none() {
-        term::dummy_prompt("Error: Interface is not set, hit enter to continue.");
-        return Ok(());
-    }
-
-    let mut args = vec![context.runtime.program_name()];
-    args.push("run");
-    args.push("-d");
-    args.push("--net=host");
-    args.extend_from_slice(&["--name", SURICATA_CONTAINER_NAME]);
-
-    args.push("--cap-add=sys_nice");
-    args.push("--cap-add=net_admin");
-    args.push("--cap-add=net_raw");
-    if context.runtime.requires_privilege() {
-        args.push("--privileged");
-    }
-
-    // Volumes.
-
-    // If we have /etc/localtime, provide it as a read-only volume.
-    if std::path::Path::new("/etc/localtime").exists() {
-        args.push("--volume=/etc/localtime:/etc/localtime:ro");
-    }
-
-    let etc_vol = context.get_volume_config(Volume::Etc);
-    args.push(&etc_vol);
-
-    // A "run" volume for the command socket, but not exposed to the host fs.
-    let run_vol = context.get_volume_config(Volume::Run);
-    args.push(&run_vol);
-
-    let log_vol = context.get_volume_config(Volume::Log);
-    args.push(&log_vol);
-
-    let lib_vol = context.get_volume_config(Volume::Lib);
-    args.push(&lib_vol);
-
-    let disable_vol;
-    if let Ok(path) = std::fs::canonicalize("./disable.conf") {
-        info!("Found {}", path.display());
-        disable_vol = format!("--volume={}:/etc/suricata/disable.conf", path.display());
-        args.push(&disable_vol);
-    }
-
-    let enable_vol;
-    if let Ok(path) = std::fs::canonicalize("./enable.conf") {
-        info!("Found {}", path.display());
-        enable_vol = format!("--volume={}:/etc/suricata/enable.conf", path.display());
-        args.push(&enable_vol);
-    }
-
-    // Restart policy.
-    if context.runtime == ContainerRuntime::Docker && context.config.start_on_boot {
-        args.push("--restart=unless-stopped");
-    }
-
-    let image_name = Container::Suricata.get_image_name();
-    args.push(&image_name);
-    args.extend_from_slice(&["-k", "none"]);
-    args.extend_from_slice(&["-i", context.config.interface.as_ref().unwrap()]);
-
-    if let Some(bpf) = &context.config.bpf_filter {
-        if !bpf.is_empty() {
-            args.push(bpf);
-        }
-    }
-
-    tracing::info!("Starting Suricata");
-    tracing::debug!(
-        "Executing: {} {}",
-        context.runtime.program_name(),
-        args.join(" ")
-    );
-    if let Err(err) = context.runtime.exec_output(&args[1..]) {
-        tracing::error!("Failed to start Suricata: {}", err);
-    } else {
-        // This is a bit of a hack to enable logrotate, exec crond inside the container.
-        let args = &["exec", SURICATA_CONTAINER_NAME, "crond"];
-        if let Err(err) = context.runtime.exec_status(args) {
-            tracing::error!(
-                "Failed to to start cron/logrotate in Suricata container: {}",
-                err
-            );
-        }
-    }
-
-    Ok(())
-}
-
-fn start(context: &Context) -> Result<()> {
-    start_suricata(context)?;
-    if context.config.evebox.enabled {
-        start_evebox(context)?;
-    }
-    Ok(())
-}
-
-fn update_rules(context: &Context) -> Result<()> {
-    let args = &["exec", "-it", SURICATA_CONTAINER_NAME, "suricata-update"];
-    if let Err(err) = context.runtime.exec_status(args) {
-        error!(
-            "An error occurred while trying to update the rules: {}",
-            err
+        println!(
+            "{} Suricata: {} {} EveBox: {}",
+            ">>>".cyan(),
+            suricata_state,
+            ">>>".cyan(),
+            evebox_state
         );
-    }
-    if context.interactive {
-        term::prompt_for_enter();
-    }
-    Ok(())
-}
-
-fn rotate_logs(context: &Context) -> Result<()> {
-    let args = vec![
-        "exec",
-        "-it",
-        SURICATA_CONTAINER_NAME,
-        "logrotate",
-        "-vf",
-        "/etc/logrotate.conf",
-    ];
-    let _ = context.runtime.exec_status(args);
-    if context.interactive {
-        term::prompt_for_enter();
-    }
-    Ok(())
-}
-
-fn update(context: &Context) -> Result<()> {
-    let images = &[
-        Container::Suricata.get_image_name(),
-        Container::EveBox.get_image_name(),
-    ];
-    for image in images {
-        let args = [context.runtime.program_name(), "pull", image];
-        let _ = Command::new(args[0]).args(&args[1..]).status();
-    }
-    update::self_update()?;
-    term::dummy_prompt("Press ENTER to continue:");
-    Ok(())
-}
-
-fn stop_container(context: &Context, name: &str) -> Result<()> {
-    let args = vec!["rm", "-f", name];
-    context.runtime.exec_output(args)?;
-    Ok(())
-}
-
-fn stop_suricata(context: &Context) -> Result<()> {
-    tracing::info!("Stopping Suricata");
-    if let Err(err) = stop_container(context, SURICATA_CONTAINER_NAME) {
-        interactive_error(context, &format!("Failed to stop Suricata: {}", err));
-    }
-    Ok(())
-}
-
-fn interactive_error(context: &Context, msg: &str) {
-    tracing::error!("{}", msg);
-    if context.interactive {
-        term::prompt_for_enter();
-    }
-}
-
-fn stop_evebox(context: &Context) -> Result<()> {
-    tracing::info!("Stopping EveBox");
-    if let Err(err) = stop_container(context, EVEBOX_CONTAINER_NAME) {
-        interactive_error(context, &format!("Failed to stop Evebox: {}", err));
-    }
-    Ok(())
-}
-
-fn stop(context: &Context) -> Result<()> {
-    if context.config.evebox.enabled {
-        stop_evebox(context)?;
-    }
-    stop_suricata(context)?;
-    Ok(())
-}
-
-fn set_monitor_interface_menu(context: &mut Context) -> Result<()> {
-    let ifnames = get_interface_names()?;
-    loop {
-        for (i, interface) in ifnames.iter().enumerate() {
-            println!("{}. {}", i + 1, interface);
-        }
         println!();
-        print!("Select interface from above menu: ");
-        if let Ok(n) = term::read_line().parse::<usize>() {
-            if let Some(ifname) = ifnames.get(n - 1) {
-                context.config.interface = Some(ifname.to_string());
-                break;
+
+        let interface = context
+            .config
+            .suricata
+            .interfaces
+            .get(0)
+            .map(String::from)
+            .unwrap_or_default();
+
+        let selections = vec![
+            SelectItem::new("refresh", "Refresh Status"),
+            if running {
+                SelectItem::new("stop", "Stop")
+            } else {
+                SelectItem::new("start", "Start")
+            },
+            SelectItem::new("interface", format!("Select Interface [{interface}]")),
+            SelectItem::new("update-rules", "Update Rules"),
+            SelectItem::new("update", "Update"),
+            SelectItem::new("configure", "Configure"),
+            SelectItem::new("other", "Other"),
+            SelectItem::new("exit", "Exit"),
+        ];
+        let selections = add_index(&selections);
+        let response = inquire::Select::new("Select a menu option", selections)
+            .with_page_size(12)
+            .prompt();
+        match response {
+            Ok(selection) => match selection.tag.as_ref() {
+                "refresh" => {}
+                "start" => {
+                    if !start(&context) {
+                        prompt::enter();
+                    }
+                }
+                "stop" => {
+                    if !stop(&context) {
+                        prompt::enter();
+                    }
+                }
+                "interface" => select_interface(&mut context),
+                "update" => {
+                    update(&context);
+                    prompt::enter();
+                }
+                "other" => menus::other(&context),
+                "configure" => menu::configure::main(&mut context),
+                "update-rules" => {
+                    if let Err(err) = actions::update_rules(&context) {
+                        error!("{}", err);
+                    }
+                    prompt::enter();
+                }
+                "exit" => break,
+                _ => panic!("Unhandled selection: {}", selection.tag),
+            },
+            Err(_) => break,
+        }
+    }
+}
+
+/// Returns true if everything started successfully, otherwise false
+/// is return.
+fn start(context: &Context) -> bool {
+    let mut ok = true;
+    info!("Starting Suricata");
+    if let Err(err) = start_suricata_detached(context) {
+        error!("Failed to start Suricata: {}", err);
+        ok = false;
+    }
+    info!("Starting EveBox");
+    if let Err(err) = start_evebox_detached(context) {
+        error!("Failed to start EveBox: {}", err);
+        ok = false;
+    }
+    ok
+}
+
+fn build_suricata_command(context: &Context, detached: bool) -> Result<std::process::Command> {
+    let interface = match context.config.suricata.interfaces.get(0) {
+        Some(interface) => interface,
+        None => bail!("no network interface set"),
+    };
+
+    let mut args = ArgBuilder::from(&[
+        "run",
+        "--name",
+        SURICATA_CONTAINER_NAME,
+        "--net=host",
+        "--cap-add=sys_nice",
+        "--cap-add=net_admin",
+        "--cap-add=net_raw",
+    ]);
+
+    if detached {
+        args.add("-d");
+    }
+
+    for volume in SuricataContainer::new(context.manager).volumes() {
+        args.add(format!("--volume={}", volume));
+    }
+
+    args.extend(&[SURICATA_IMAGE, "-v", "-i", interface]);
+
+    let mut command = context.manager.command();
+    command.args(&args.args);
+    Ok(command)
+}
+
+fn start_suricata_detached(context: &Context) -> Result<()> {
+    context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
+    let mut command = build_suricata_command(context, true)?;
+    let output = command.output()?;
+    if !output.status.success() {
+        bail!(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    if let Err(err) = start_suricata_logrotate(context) {
+        error!("{}", err);
+    }
+    Ok(())
+}
+
+fn start_suricata_logrotate(context: &Context) -> Result<()> {
+    info!("Starting Suricata log rotation");
+    match context
+        .manager
+        .command()
+        .args([
+            "exec",
+            "-d",
+            SURICATA_CONTAINER_NAME,
+            "bash",
+            "-c",
+            "while true; do logrotate -v /etc/logrotate.d/suricata > /tmp/last_logrotate 2>&1; sleep 600; done",
+        ])
+        .output()
+    {
+        Ok(output) => {
+            if !output.status.success() {
+                bail!(String::from_utf8_lossy(&output.stderr).to_string());
             }
         }
+        Err(err) => bail!("Failed to initialize log rotation: {err}"),
     }
-    context.config.save(None)?;
     Ok(())
 }
 
-/// Return a vector of found network interface names.
-fn get_interface_names() -> Result<Vec<String>> {
-    let mut ifnames = Vec::new();
-    let re = regex::Regex::new(r"^\d+:\s+([^\s]+)")?;
-    let output = Command::new("ip").arg("link").arg("show").output()?;
-    let out = String::from_utf8(output.stdout)?;
-    for line in out.split('\n') {
-        for cap in re.captures_iter(line) {
-            let ifname = if cap[1].ends_with(':') {
-                &cap[1][0..&cap[1].len() - 1]
-            } else {
-                &cap[1]
-            };
-            ifnames.push(ifname.to_string());
+fn build_evebox_command(context: &Context, daemon: bool) -> process::Command {
+    let mut args = ArgBuilder::from(&[
+        "run",
+        "--name",
+        EVEBOX_CONTAINER_NAME,
+        // "--restart=unless-stopped",
+    ]);
+    if context.config.evebox.allow_remote {
+        args.add("--publish=5636:5636");
+    } else {
+        args.add("--publish=127.0.0.1:5636:5636");
+    }
+    if daemon {
+        args.add("-d");
+    }
+
+    for volume in Container::EveBox.volumes() {
+        args.add(format!("--volume={}", volume));
+    }
+
+    args.extend(&[EVEBOX_IMAGE, "evebox", "server"]);
+
+    if context.config.evebox.no_tls {
+        args.add("--no-tls");
+    }
+
+    if context.config.evebox.no_auth {
+        args.add("--no-auth");
+    }
+
+    args.extend(&["--host=[::0]", "--sqlite", "/var/log/suricata/eve.json"]);
+    let mut command = context.manager.command();
+    command.args(&args.args);
+    command
+}
+
+fn start_evebox_detached(context: &Context) -> Result<()> {
+    actions::start_evebox(context)
+}
+
+fn select_interface(context: &mut Context) {
+    let interfaces = system::get_interfaces().unwrap();
+    let current_if = context.config.suricata.interfaces.get(0);
+    let index = interfaces
+        .iter()
+        .position(|interface| Some(&interface.name) == current_if)
+        .unwrap_or(0);
+    let selections: Vec<SelectItem> = interfaces
+        .iter()
+        .enumerate()
+        .map(|(i, ifname)| {
+            let address = ifname
+                .addr4
+                .first()
+                .map(|s| format!("-- {}", s.green().italic()))
+                .unwrap_or("".to_string());
+            SelectItem::new(
+                ifname.name.to_string(),
+                format!("{}) {} {}", i + 1, ifname.name, address),
+            )
+        })
+        .collect();
+    match inquire::Select::new("Select interface", selections)
+        .with_starting_cursor(index)
+        .with_page_size(12)
+        .prompt()
+    {
+        Err(_) => {}
+        Ok(selection) => {
+            context.config.suricata.interfaces = vec![selection.tag.to_string()];
+            let _ = context.config.save();
         }
     }
-    Ok(ifnames)
+}
+
+fn update(context: &Context) -> bool {
+    let mut ok = true;
+    for image in [SURICATA_IMAGE, EVEBOX_IMAGE] {
+        if let Err(err) = context.manager.pull(image) {
+            error!("Failed to pull {image}: {err}");
+            ok = false;
+        }
+    }
+    if let Err(err) = selfupdate::self_update() {
+        error!("Failed to update SimpleNSM: {err}");
+        ok = false;
+    }
+    ok
+}
+
+#[derive(Debug, Clone)]
+struct SelectItem {
+    tag: String,
+    label: String,
+}
+
+impl SelectItem {
+    fn new(tag: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            tag: tag.into(),
+            label: label.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for SelectItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.label)
+    }
+}
+
+fn add_index(selections: &[SelectItem]) -> Vec<SelectItem> {
+    selections
+        .iter()
+        .enumerate()
+        .map(|(i, e)| SelectItem::new(e.tag.to_string(), format!("{}. {}", i + 1, e.label)))
+        .collect()
+}
+
+/// Utility for building arguments for commands.
+#[derive(Debug, Default)]
+struct ArgBuilder {
+    args: Vec<String>,
+}
+
+impl ArgBuilder {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn from<S: AsRef<str>>(args: &[S]) -> Self {
+        let mut builder = Self::default();
+        builder.extend(args);
+        builder
+    }
+
+    fn add(&mut self, arg: impl Into<String>) -> &mut Self {
+        self.args.push(arg.into());
+        self
+    }
+
+    fn extend<S: AsRef<str>>(&mut self, args: &[S]) -> &mut Self {
+        for arg in args {
+            self.args.push(arg.as_ref().to_string());
+        }
+        self
+    }
 }
