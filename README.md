@@ -9,9 +9,9 @@ etc, etc... And I might even force push!
 
 ## System Requirements
 
-- An x86_64, Aarch64 or Arm32 based Linux distribution with Docker or
+- An x86_64 or Aarch64 based Linux distribution with Docker or
   Podman. This includes most Linux distributions available today
-  including Raspberry Pi OS.
+  including Raspberry Pi OS (with 64 bit update applied).
 - Root access.
 
 ## Installation the Easy Way
@@ -63,10 +63,4 @@ cross build --release --target x86_64-unknown-linux-musl
 
 ```
 cross build --release --target aarch64-unknown-linux-musl
-```
-
-#### ArmV7 (Raspberry Pi 32 bit)
-
-```
-cross build --release --target arm-unknown-linux-musleabihf
 ```
