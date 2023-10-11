@@ -139,10 +139,15 @@ impl ContainerManager {
     }
 
     pub(crate) fn stop(&self, name: &str, signal: Option<&str>) -> Result<()> {
-        let output = self
-            .command()
-            .args(["stop", "--signal", signal.unwrap_or("SIGTERM"), name])
-            .output()?;
+	let mut cmd = self.command();
+	cmd.arg("stop");
+
+	// Custom stop signals are not supported on Podman.
+	if self == &Self::Docker {
+	    cmd.args(["--signal", signal.unwrap_or("SIGTERM")]);
+	}
+	cmd.arg(name);
+	let output = cmd.output()?;
         if !output.status.success() {
             bail!(String::from_utf8_lossy(&output.stderr).to_string());
         }
