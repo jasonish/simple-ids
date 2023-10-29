@@ -13,11 +13,13 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use config::Config;
 use container::{Container, ContainerManager, SuricataContainer};
-use tracing::{error, info, warn, Level, debug};
+use logs::LogArgs;
+use tracing::{debug, error, info, warn, Level};
 
 mod actions;
 mod config;
 mod container;
+mod logs;
 mod menu;
 mod menus;
 mod prompt;
@@ -60,6 +62,9 @@ enum Commands {
     Status,
     UpdateRules,
     Update,
+
+    /// View the container logs
+    Logs(LogArgs),
 
     // Commands to jump to specific menus.
     ConfigureMenu,
@@ -128,6 +133,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Commands::ConfigureMenu => {
                 menu::configure::main(&mut context);
+                0
+            }
+            Commands::Logs(args) => {
+                logs::logs(&context, args);
                 0
             }
         };
