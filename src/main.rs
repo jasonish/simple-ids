@@ -55,8 +55,9 @@ struct Args {
 #[derive(Subcommand, Debug)]
 enum Commands {
     Start {
+        /// Run in the foreground, mainly for debugging
         #[arg(long, short)]
-        detach: bool,
+        debug: bool,
     },
     Stop,
     Status,
@@ -108,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(command) = args.command {
         let code = match command {
-            Commands::Start { detach } => command_start(&context, detach),
+            Commands::Start { debug: detach } => command_start(&context, detach),
             Commands::Stop => {
                 if stop(&context) {
                     0
@@ -184,12 +185,12 @@ fn process_output_handler<R: Read + Sync + Send + 'static>(
 }
 
 /// Run when "start" is run from the command line.
-fn command_start(context: &Context, detach: bool) -> i32 {
-    if detach {
+fn command_start(context: &Context, debug: bool) -> i32 {
+    if debug {
+        start_foreground(context)
+    } else {
         start(context);
         0
-    } else {
-        start_foreground(context)
     }
 }
 
