@@ -1,0 +1,35 @@
+simplensm-suricata | stdout | 2023-10-29T20:39:11.416463998Z Checking for capability sys_nice: yes
+simplensm-suricata | stdout | 2023-10-29T20:39:11.417275442Z Checking for capability net_admin: yes
+simplensm-suricata | stdout | 2023-10-29T20:39:11.432584994Z Notice: suricata: This is Suricata version 7.0.2 RELEASE running in SYSTEM mode
+simplensm-suricata | stdout | 2023-10-29T20:39:11.432611964Z Info: cpu: CPUs/cores online: 20
+simplensm-suricata | stdout | 2023-10-29T20:39:11.432628925Z Info: suricata: Setting engine mode to IDS mode by default
+simplensm-suricata | stdout | 2023-10-29T20:39:11.432633651Z Info: exception-policy: master exception-policy set to: auto
+simplensm-suricata | stdout | 2023-10-29T20:39:11.459493878Z Info: ioctl: enp10s0: MTU 1500
+simplensm-suricata | stdout | 2023-10-29T20:39:11.469223225Z Info: privs: dropped the caps for main thread
+simplensm-suricata | stdout | 2023-10-29T20:39:11.469237806Z Info: conf: Running in live mode, activating unix socket
+simplensm-suricata | stdout | 2023-10-29T20:39:11.469240791Z Info: logopenfile: fast output device (regular) initialized: fast.log
+simplensm-suricata | stdout | 2023-10-29T20:39:11.469248602Z Info: logopenfile: eve-log output device (regular) initialized: eve.json
+simplensm-suricata | stdout | 2023-10-29T20:39:11.469276496Z Info: logopenfile: stats output device (regular) initialized: stats.log
+simplensm-suricata | stdout | 2023-10-29T20:39:14.251414746Z Info: detect: 1 rule files processed. 35554 rules successfully loaded, 0 rules failed
+simplensm-suricata | stdout | 2023-10-29T20:39:14.270591248Z Info: threshold-config: Threshold config parsed: 0 rule(s) found
+simplensm-suricata | stdout | 2023-10-29T20:39:14.310319356Z Info: detect: 35557 signatures processed. 1240 are IP-only rules, 5317 are inspecting packet payload, 28788 inspect application layer, 108 are decoder event only
+simplensm-suricata | stdout | 2023-10-29T20:39:22.094035374Z Info: runmodes: enp10s0: creating 20 threads
+simplensm-suricata | stdout | 2023-10-29T20:39:22.229194674Z Info: unix-manager: unix socket '/var/run/suricata/suricata-command.socket'
+simplensm-suricata | stdout | 2023-10-29T20:39:22.860976765Z Notice: threads: Threads created -> W: 20 FM: 1 FR: 1   Engine started.
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.736136087Z [2m[0m [32m INFO[0m [2mevebox::version[0m[2m:[0m This is EveBox version 0.18.0-dev (rev: 61557f7); x86_64-unknown-linux-musl
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.738458390Z [2m[0m [32m INFO[0m [2mevebox::sqlite::connection[0m[2m:[0m Auto-vacuum: 1
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.739651186Z [2m[0m [32m INFO[0m [2mrefinery_core::traits[0m[2m:[0m current version: 4    
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.739672526Z [2m[0m [32m INFO[0m [2mrefinery_core::traits::sync[0m[2m:[0m no migrations to apply    
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.739707759Z [2m[0m [32m INFO[0m [2mevebox::sqlite::connection[0m[2m:[0m Updating SQLite indexes
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.739790369Z [2m[0m [32m INFO[0m [2mevebox::server::main[0m[2m:[0m FTS enabled: true
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740277545Z [2m[0m [32m INFO[0m [2mevebox::sqlite::retention[0m[2m:[0m Database retention settings: days=7, size=0
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740361312Z [2m[0m [32m INFO[0m [2mevebox::server::main[0m[2m:[0m Configuration database filename: "/var/lib/evebox/config.sqlite"
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740522993Z [2m[0m [32m INFO[0m [2mrefinery_core::traits[0m[2m:[0m current version: 1    
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740532822Z [2m[0m [32m INFO[0m [2mrefinery_core::traits::sync[0m[2m:[0m no migrations to apply    
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740618152Z [2m[0m [33m WARN[0m [2mevebox::server::main[0m[2m:[0m Failed to open GeoIP database: error=No database file found
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740639138Z [2m[0m [32m INFO[0m [2mevebox::server::main[0m[2m:[0m Starting server on [::0]:5636, tls=true
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740645173Z [2m[0m [32m INFO[0m [2mevebox::server::main[0m[2m:[0m Using directory /var/lib/evebox for self signed TLS certificate and key files
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740649831Z [2m[0m [32m INFO[0m [2mevebox::cert[0m[2m:[0m Found existing TLS certificate and key: /var/lib/evebox/cert.pem, /var/lib/evebox/key.pem
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740689420Z [2m[0m [32m INFO[0m [2mevebox::eve::watcher[0m[2m:[0m Found EVE input file /var/log/suricata/eve.json
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740717299Z [2m[0m [32m INFO[0m [2mevebox::eve::watcher[0m[2m:[0m Starting EVE processor for /var/log/suricata/eve.json
+simplensm-evebox   | stderr | 2023-10-29T20:39:11.740746449Z [2m[0m [32m INFO[0m [2mevebox::eve::processor[0m[2m:[0m Valid bookmark found, jumping to record: 110847

@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 use std::{
-    fs::{File, self},
-    io::{Seek, SeekFrom, self},
+    env,
+    fs::{self, File},
+    io::{self, Seek, SeekFrom},
     os::unix::prelude::PermissionsExt,
-    path::Path, process, env,
+    path::Path,
+    process,
 };
 
 use anyhow::{bail, Result};
