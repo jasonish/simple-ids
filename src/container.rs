@@ -192,9 +192,13 @@ fn version(manager: ContainerManager) -> Result<String> {
         if let Some(version) = json["Client"]["Version"].as_str() {
             return Ok(version.to_string());
         }
+        if let Some(version) = json["Version"].as_str() {
+            return Ok(version.to_string());
+        }
     }
     bail!(
-        "Failed to find Podman version in output: {}",
+        "Failed to find {} version in output: {}",
+        manager.to_string(),
         String::from_utf8_lossy(&output.stdout).to_string()
     );
 }
