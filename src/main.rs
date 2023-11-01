@@ -23,6 +23,7 @@ mod logs;
 mod menu;
 mod menus;
 mod prompt;
+mod ruleindex;
 mod selfupdate;
 mod system;
 mod term;

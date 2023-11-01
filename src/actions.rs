@@ -1,10 +1,13 @@
 // SPDX-FileCopyrightText: (C) 2021 Jason Ish <jason@codemonkey.net>
 // SPDX-License-Identifier: MIT
 
+use std::collections::HashSet;
+
 use anyhow::{bail, Result};
 use tracing::error;
 
 use crate::container::{CommandExt, SuricataContainer};
+use crate::ruleindex::RuleIndex;
 use crate::{build_evebox_command, EVEBOX_CONTAINER_NAME};
 use crate::{Context, SURICATA_CONTAINER_NAME};
 
@@ -20,6 +23,56 @@ pub(crate) fn force_suricata_logrotate(context: &Context) {
             "/etc/logrotate.d/suricata",
         ])
         .status();
+}
+
+pub(crate) fn load_rule_index(context: &Context) -> Result<RuleIndex> {
+    let container = SuricataContainer::new(context.manager);
+    let output = container
+        .run()
+        .rm()
+        .args(&["cat", "/var/lib/suricata/update/cache/index.yaml"])
+        .build()
+        .status_output()?;
+    let index: RuleIndex = serde_yaml::from_slice(&output)?;
+    Ok(index)
+}
+
+pub(crate) fn get_enabled_ruleset(context: &Context) -> Result<HashSet<String>> {
+    let mut enabled: HashSet<String> = HashSet::new();
+    let container = SuricataContainer::new(context.manager);
+    let output = container
+        .run()
+        .args(&["suricata-update", "list-sources", "--enabled"])
+        .build()
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let re = regex::Regex::new(r"^[\s]*\-\s*(.*)").unwrap();
+    for line in stdout.lines() {
+        if let Some(caps) = re.captures(line) {
+            enabled.insert(String::from(&caps[1]));
+        }
+    }
+    Ok(enabled)
+}
+
+pub(crate) fn enable_ruleset(context: &Context, ruleset: &str) -> Result<()> {
+    let container = SuricataContainer::new(context.manager);
+    container
+        .run()
+        .args(&["suricata-update", "enable-source", ruleset])
+        .build()
+        .status_ok()?;
+    Ok(())
+}
+
+pub(crate) fn disable_ruleset(context: &Context, ruleset: &str) -> Result<()> {
+    let container = SuricataContainer::new(context.manager);
+    container
+        .run()
+        .args(&["suricata-update", "disable-source", ruleset])
+        .build()
+        .status_ok()?;
+    Ok(())
 }
 
 pub(crate) fn update_rules(context: &Context) -> Result<()> {
