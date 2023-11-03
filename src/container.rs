@@ -4,7 +4,7 @@
 use anyhow::{bail, Result};
 use serde::Deserialize;
 use std::process::Command;
-use tracing::debug;
+use tracing::{debug, error, info};
 
 use crate::{
     EVEBOX_VOLUME_LIB, SURICATA_IMAGE, SURICATA_VOLUME_LIB, SURICATA_VOLUME_LOG,
@@ -203,17 +203,48 @@ fn version(manager: ContainerManager) -> Result<String> {
     );
 }
 
-pub(crate) fn find_manager() -> Option<ContainerManager> {
-    debug!("Looking for Docker container manager");
-    if let Ok(version) = version(ContainerManager::Docker) {
-        debug!("Found Docker version {version}");
-        return Some(ContainerManager::Docker);
-    }
+/// Return true if the program for the container manager exists.
+pub(crate) fn exists(manager: ContainerManager) -> bool {
+    manager.command().status().is_ok()
+}
 
-    debug!("Looking for Podman container manager");
-    if let Ok(version) = version(ContainerManager::Podman) {
-        debug!("Found Podman version {version}");
-        return Some(ContainerManager::Podman);
+pub(crate) fn find_manager(podman: bool) -> Option<ContainerManager> {
+    if !podman {
+        debug!("Looking for Docker container engine");
+        let manager = ContainerManager::Docker;
+        if exists(manager) {
+            info!("Found Docker container engine");
+            if let Ok(version) = version(manager) {
+                debug!("Found Docker version {version}");
+
+                return Some(ContainerManager::Docker);
+            }
+        } else {
+            info!("Docker not found");
+        }
+    };
+
+    debug!("Looking for Podman container engine");
+    let manager = ContainerManager::Podman;
+    if exists(manager) {
+        info!("Found Podman container engine");
+        if let Ok(version) = version(manager) {
+            debug!("Found Podman version {version}");
+            match semver::Version::parse(&version) {
+                Ok(version) => {
+                    if version.major < 4 || (version.major == 4 && version.minor < 6) {
+                        error!("Podman version must be at least 4.7.0");
+                    } else {
+                        return Some(ContainerManager::Podman);
+                    }
+                }
+                Err(_) => {
+                    error!("Failed to parse Podman version");
+                }
+            }
+        }
+    } else {
+        info!("Podman not found");
     }
 
     None

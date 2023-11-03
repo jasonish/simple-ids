@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = config::Config::new();
 
-    let manager = match container::find_manager() {
+    let manager = match container::find_manager(args.podman) {
         Some(manager) => manager,
         None => {
             error!("No container manager found. Docker or Podman must be available.");
@@ -424,7 +424,8 @@ fn menu_main(mut context: Context) {
         let interface = context
             .config
             .suricata
-            .interfaces.first()
+            .interfaces
+            .first()
             .map(String::from)
             .unwrap_or_default();
 
