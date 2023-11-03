@@ -424,8 +424,7 @@ fn menu_main(mut context: Context) {
         let interface = context
             .config
             .suricata
-            .interfaces
-            .get(0)
+            .interfaces.first()
             .map(String::from)
             .unwrap_or_default();
 
@@ -499,7 +498,7 @@ fn start(context: &Context) -> bool {
 }
 
 fn build_suricata_command(context: &Context, detached: bool) -> Result<std::process::Command> {
-    let interface = match context.config.suricata.interfaces.get(0) {
+    let interface = match context.config.suricata.interfaces.first() {
         Some(interface) => interface,
         None => bail!("no network interface set"),
     };
@@ -610,7 +609,7 @@ fn start_evebox_detached(context: &Context) -> Result<()> {
 
 fn select_interface(context: &mut Context) {
     let interfaces = system::get_interfaces().unwrap();
-    let current_if = context.config.suricata.interfaces.get(0);
+    let current_if = context.config.suricata.interfaces.first();
     let index = interfaces
         .iter()
         .position(|interface| Some(&interface.name) == current_if)
