@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-const FILENAME: &str = "simplensm.yml";
+const FILENAME: &str = "simple-ids.yml";
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Eq, PartialEq)]
 pub(crate) struct Config {

@@ -31,14 +31,14 @@ mod term;
 const SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:7.0";
 const EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
 
-const SURICATA_CONTAINER_NAME: &str = "simplensm-suricata";
-const EVEBOX_CONTAINER_NAME: &str = "simplensm-evebox";
+const SURICATA_CONTAINER_NAME: &str = "simple-ids-suricata";
+const EVEBOX_CONTAINER_NAME: &str = "simple-ids-evebox";
 
-const SURICATA_VOLUME_LOG: &str = "simplensm-suricata-log";
-const SURICATA_VOLUME_LIB: &str = "simplensm-suricata-lib";
-const SURICATA_VOLUME_RUN: &str = "simplensm-suricata-run";
+const SURICATA_VOLUME_LOG: &str = "simple-ids-suricata-log";
+const SURICATA_VOLUME_LIB: &str = "simple-ids-suricata-lib";
+const SURICATA_VOLUME_RUN: &str = "simple-ids-suricata-run";
 
-const EVEBOX_VOLUME_LIB: &str = "simplensm-evebox-lib";
+const EVEBOX_VOLUME_LIB: &str = "simple-ids-evebox-lib";
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -195,7 +195,7 @@ fn command_start(context: &Context, debug: bool) -> i32 {
     }
 }
 
-/// Start SimpleNSM in the foreground.
+/// Start Simple-IDS in the foreground.
 ///
 /// Typically not done from the menus but instead the command line.
 fn start_foreground(context: &Context) -> i32 {
@@ -388,7 +388,7 @@ fn guess_evebox_url(context: &Context) -> String {
 
 fn menu_main(mut context: Context) {
     loop {
-        term::clear_title("SimpleNSM: Main Menu");
+        term::clear_title("Simple-IDS: Main Menu");
 
         let evebox_url = guess_evebox_url(&context);
 
@@ -652,7 +652,7 @@ fn update(context: &Context) -> bool {
         }
     }
     if let Err(err) = selfupdate::self_update() {
-        error!("Failed to update SimpleNSM: {err}");
+        error!("Failed to update Simple-IDS: {err}");
         ok = false;
     }
     ok

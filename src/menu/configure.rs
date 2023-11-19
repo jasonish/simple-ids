@@ -6,7 +6,7 @@ use crate::{add_index, term, Context, SelectItem};
 /// Main configure menu.
 pub(crate) fn main(context: &mut Context) {
     loop {
-        term::clear_title("SimpleNSM: Configure");
+        term::clear_title("Simple-IDS: Configure");
 
         let selections = vec![
             SelectItem::new("suricata-update", "Suricata-Update Configuration"),

@@ -1,6 +1,6 @@
-# SimpleNSM - Suricata/EveBox
+# Simple-IDS - Suricata/EveBox
 
-SimpleNSM is a tool to easily run Suricata and EveBox Linux systems
+Simple-IDS is a tool to easily run Suricata and EveBox Linux systems
 using Docker or Podman.
 
 This program is considered experimental and many things may change,
@@ -17,16 +17,16 @@ etc, etc... And I might even force push!
 ## Installation the Easy Way
 
 ```
-mkdir ~/simplensm
-curl -sSf https://evebox.org/simplensm.sh | sh
+mkdir ~/simple-ids
+curl -sSf https://evebox.org/simple-ids.sh | sh
 ```
 
-Or download directly from https://evebox.org/files/simplensm/.
+Or download directly from https://evebox.org/files/simple-ids/.
 
 Once you have the program downloaded, run it:
 
 ```
-./simplensm
+./simple-ids
 ```
 
 Under the configure menu select your network interface, then select
@@ -34,8 +34,8 @@ Under the configure menu select your network interface, then select
 
 ## Building
 
-If you just want to use SimpleNSM you can download a pre-compiled
-binary. The following is only for those who wish to compile SimpleNSM
+If you just want to use Simple-IDS you can download a pre-compiled
+binary. The following is only for those who wish to compile Simple-IDS
 themselves.
 
 ### For Host OS

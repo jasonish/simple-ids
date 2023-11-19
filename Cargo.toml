@@ -1,10 +1,10 @@
 [package]
-name = "simplensm"
+name = "simple-ids"
 version = "0.2.0"
 authors = ["Jason Ish <jason@codemonkey.net>"]
 edition = "2021"
-description = "SimpleNSM with Suricata and EveBox"
-homepage = "https://github.com/jasonish/simplensm"
+description = "Simple-IDS with Suricata and EveBox"
+homepage = "https://github.com/jasonish/simple-ids"
 license = "MIT"
 
 # Some tweaks to reduce binary size.
