@@ -3,8 +3,8 @@
 
 use crate::{
     add_index,
-    container::{CommandExt, RunCommandBuilder},
-    prompt, term, Context, SelectItem, SURICATA_IMAGE,
+    container::{self, CommandExt, Container, RunCommandBuilder},
+    prompt, term, Context, SelectItem,
 };
 use anyhow::Result;
 use colored::Colorize;
@@ -101,7 +101,8 @@ fn copy_suricata_update_template(context: &Context, filename: &str) -> Result<()
         "/usr/lib/suricata/python/suricata/update/configs/{}",
         filename
     );
-    let output = RunCommandBuilder::new(context.manager, SURICATA_IMAGE)
+    let image = container::image_name(context, Container::Suricata);
+    let output = RunCommandBuilder::new(context.manager, image)
         .rm()
         .args(&["cat", &source])
         .build()

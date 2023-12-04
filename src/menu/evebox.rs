@@ -4,8 +4,10 @@
 use tracing::{error, info, warn};
 
 use crate::{
-    actions, add_index, config::EveBoxConfig, container::Container, prompt, term, ArgBuilder,
-    Context, SelectItem, EVEBOX_CONTAINER_NAME, EVEBOX_IMAGE,
+    actions, add_index,
+    config::EveBoxConfig,
+    container::{self, Container},
+    prompt, term, ArgBuilder, Context, SelectItem, EVEBOX_CONTAINER_NAME,
 };
 
 pub(crate) fn configure(context: &mut Context) {
@@ -154,6 +156,7 @@ fn disable_remote_access(context: &mut Context) {
 }
 
 fn reset_password(context: &mut Context) {
+    let image = container::image_name(context, Container::EveBox);
     let mut args = ArgBuilder::new();
     args.add("run");
     for volume in Container::EveBox.volumes() {
@@ -161,14 +164,7 @@ fn reset_password(context: &mut Context) {
         args.add(volume);
     }
     args.extend(&[
-        "--rm",
-        "-it",
-        EVEBOX_IMAGE,
-        "evebox",
-        "config",
-        "users",
-        "rm",
-        "admin",
+        "--rm", "-it", &image, "evebox", "config", "users", "rm", "admin",
     ]);
     let _ = context.manager.command().args(&args.args).status();
 
@@ -181,7 +177,7 @@ fn reset_password(context: &mut Context) {
     args.extend(&[
         "--rm",
         "-it",
-        EVEBOX_IMAGE,
+        &image,
         "evebox",
         "config",
         "users",

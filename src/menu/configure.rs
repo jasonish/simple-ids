@@ -11,6 +11,7 @@ pub(crate) fn main(context: &mut Context) {
         let selections = vec![
             SelectItem::new("suricata-update", "Suricata-Update Configuration"),
             SelectItem::new("evebox", "EveBox Configuration"),
+            SelectItem::new("advanced", "Advanced"),
             SelectItem::new("return", "Return"),
         ];
         let selections = add_index(&selections);
@@ -19,6 +20,7 @@ pub(crate) fn main(context: &mut Context) {
             Ok(selection) => match selection.tag.as_ref() {
                 "suricata-update" => crate::menu::suricata_update::menu(context),
                 "evebox" => crate::menu::evebox::configure(context),
+                "advanced" => crate::menu::advanced::advanced_menu(context),
                 "return" => return,
                 _ => unimplemented!(),
             },

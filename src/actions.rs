@@ -26,7 +26,7 @@ pub(crate) fn force_suricata_logrotate(context: &Context) {
 }
 
 pub(crate) fn load_rule_index(context: &Context) -> Result<RuleIndex> {
-    let container = SuricataContainer::new(context.manager);
+    let container = SuricataContainer::new(context.clone());
     let output = container
         .run()
         .rm()
@@ -39,7 +39,7 @@ pub(crate) fn load_rule_index(context: &Context) -> Result<RuleIndex> {
 
 pub(crate) fn get_enabled_ruleset(context: &Context) -> Result<HashSet<String>> {
     let mut enabled: HashSet<String> = HashSet::new();
-    let container = SuricataContainer::new(context.manager);
+    let container = SuricataContainer::new(context.clone());
     let output = container
         .run()
         .args(&["suricata-update", "list-sources", "--enabled"])
@@ -56,7 +56,7 @@ pub(crate) fn get_enabled_ruleset(context: &Context) -> Result<HashSet<String>> 
 }
 
 pub(crate) fn enable_ruleset(context: &Context, ruleset: &str) -> Result<()> {
-    let container = SuricataContainer::new(context.manager);
+    let container = SuricataContainer::new(context.clone());
     container
         .run()
         .args(&["suricata-update", "enable-source", ruleset])
@@ -66,7 +66,7 @@ pub(crate) fn enable_ruleset(context: &Context, ruleset: &str) -> Result<()> {
 }
 
 pub(crate) fn disable_ruleset(context: &Context, ruleset: &str) -> Result<()> {
-    let container = SuricataContainer::new(context.manager);
+    let container = SuricataContainer::new(context.clone());
     container
         .run()
         .args(&["suricata-update", "disable-source", ruleset])
@@ -76,7 +76,7 @@ pub(crate) fn disable_ruleset(context: &Context, ruleset: &str) -> Result<()> {
 }
 
 pub(crate) fn update_rules(context: &Context) -> Result<()> {
-    let container = SuricataContainer::new(context.manager);
+    let container = SuricataContainer::new(context.clone());
 
     let mut volumes = vec![];
 

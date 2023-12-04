@@ -28,9 +28,6 @@ mod selfupdate;
 mod system;
 mod term;
 
-const SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:7.0";
-const EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
-
 const SURICATA_CONTAINER_NAME: &str = "simple-ids-suricata";
 const EVEBOX_CONTAINER_NAME: &str = "simple-ids-evebox";
 
@@ -70,8 +67,13 @@ enum Commands {
 
     // Commands to jump to specific menus.
     ConfigureMenu,
+
+    Menu {
+        menu: String,
+    },
 }
 
+#[derive(Clone)]
 struct Context {
     config: Config,
     manager: ContainerManager,
@@ -141,6 +143,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 logs::logs(&context, args);
                 0
             }
+            Commands::Menu { menu } => match menu.as_str() {
+                "configure.advanced" => {
+                    menu::advanced::advanced_menu(&mut context);
+                    0
+                }
+                _ => panic!("Unhandled menu: {}", menu),
+            },
         };
         std::process::exit(code);
     } else {
@@ -518,11 +527,12 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
         args.add("-d");
     }
 
-    for volume in SuricataContainer::new(context.manager).volumes() {
+    for volume in SuricataContainer::new(context.clone()).volumes() {
         args.add(format!("--volume={}", volume));
     }
 
-    args.extend(&[SURICATA_IMAGE, "-v", "-i", interface]);
+    args.add(container::image_name(context, Container::Suricata));
+    args.extend(&["-v", "-i", interface]);
 
     let mut command = context.manager.command();
     command.args(&args.args);
@@ -588,7 +598,8 @@ fn build_evebox_command(context: &Context, daemon: bool) -> process::Command {
         args.add(format!("--volume={}", volume));
     }
 
-    args.extend(&[EVEBOX_IMAGE, "evebox", "server"]);
+    args.add(container::image_name(context, Container::EveBox));
+    args.extend(&["evebox", "server"]);
 
     if context.config.evebox.no_tls {
         args.add("--no-tls");
@@ -645,8 +656,11 @@ fn select_interface(context: &mut Context) {
 
 fn update(context: &Context) -> bool {
     let mut ok = true;
-    for image in [SURICATA_IMAGE, EVEBOX_IMAGE] {
-        if let Err(err) = context.manager.pull(image) {
+    for image in [
+        container::image_name(context, Container::Suricata),
+        container::image_name(context, Container::EveBox),
+    ] {
+        if let Err(err) = context.manager.pull(&image) {
             error!("Failed to pull {image}: {err}");
             ok = false;
         }

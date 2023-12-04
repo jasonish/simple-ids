@@ -19,6 +19,7 @@ pub(crate) struct Config {
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Eq, PartialEq)]
 pub(crate) struct SuricataConfig {
     pub interfaces: Vec<String>,
+    pub image: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Eq, PartialEq)]
@@ -29,6 +30,7 @@ pub(crate) struct EveBoxConfig {
     pub no_tls: bool,
     #[serde(rename = "no-auth", default)]
     pub no_auth: bool,
+    pub image: Option<String>,
 }
 
 impl Default for EveBoxConfig {
@@ -37,6 +39,7 @@ impl Default for EveBoxConfig {
             allow_remote: false,
             no_tls: true,
             no_auth: true,
+            image: None,
         }
     }
 }

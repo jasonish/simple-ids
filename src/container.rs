@@ -7,9 +7,11 @@ use std::process::Command;
 use tracing::{debug, error, info};
 
 use crate::{
-    EVEBOX_VOLUME_LIB, SURICATA_IMAGE, SURICATA_VOLUME_LIB, SURICATA_VOLUME_LOG,
-    SURICATA_VOLUME_RUN,
+    Context, EVEBOX_VOLUME_LIB, SURICATA_VOLUME_LIB, SURICATA_VOLUME_LOG, SURICATA_VOLUME_RUN,
 };
+
+const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
+const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
 
 /// Command extensions useful for containers.
 pub(crate) trait CommandExt {
@@ -273,13 +275,34 @@ impl Container {
     }
 }
 
+/// Given the context and a Container, return an image name, which is
+/// either the default or a user configured value.
+pub(crate) fn image_name(context: &Context, container: Container) -> String {
+    match container {
+        Container::Suricata => context
+            .config
+            .suricata
+            .image
+            .as_deref()
+            .unwrap_or(DEFAULT_SURICATA_IMAGE)
+            .to_string(),
+        Container::EveBox => context
+            .config
+            .evebox
+            .image
+            .as_deref()
+            .unwrap_or(DEFAULT_EVEBOX_IMAGE)
+            .to_string(),
+    }
+}
+
 pub(crate) struct SuricataContainer {
-    manager: ContainerManager,
+    context: Context,
 }
 
 impl SuricataContainer {
-    pub(crate) fn new(manager: ContainerManager) -> Self {
-        Self { manager }
+    pub(crate) fn new(context: Context) -> Self {
+        Self { context }
     }
 
     pub(crate) fn volumes(&self) -> Vec<String> {
@@ -291,7 +314,10 @@ impl SuricataContainer {
     }
 
     pub(crate) fn run(&self) -> RunCommandBuilder {
-        let mut builder = RunCommandBuilder::new(self.manager, SURICATA_IMAGE);
+        let mut builder = RunCommandBuilder::new(
+            self.context.manager,
+            image_name(&self.context, Container::Suricata),
+        );
         builder.volumes(&self.volumes());
         builder
     }
