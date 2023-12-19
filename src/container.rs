@@ -120,7 +120,7 @@ impl ContainerManager {
         }
     }
 
-    fn inspect_first(&self, name: &str) -> Result<InspectEntry> {
+    pub(crate) fn inspect_first(&self, name: &str) -> Result<InspectEntry> {
         let mut command = self.command();
         command.args(["inspect", name]);
         let mut entries: Vec<InspectEntry> = command_json(&mut command)?;
@@ -131,10 +131,14 @@ impl ContainerManager {
         }
     }
 
+    pub(crate) fn has_image(&self, name: &str) -> bool {
+	self.inspect_first(name).is_ok()
+    }
+
     pub(crate) fn is_running(&self, name: &str) -> bool {
-        if let Ok(inspect) = self.inspect_first(name) {
-            return inspect.state.running;
-        }
+	if let Ok(state) = self.state(name) {
+	    return state.running;
+	}
         false
     }
 
@@ -142,7 +146,10 @@ impl ContainerManager {
     ///
     /// If the container doesn't exist an error is returned.
     pub(crate) fn state(&self, name: &str) -> Result<InspectState> {
-        Ok(self.inspect_first(name)?.state)
+	match self.inspect_first(name)?.state {
+	    Some(state) => Ok(state),
+	    None => bail!("not a container"),
+	}
     }
 
     /// Test if a container exists.
@@ -215,8 +222,16 @@ impl CommandExt for std::process::Command {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct InspectEntry {
+    #[serde(rename = "Id")]
+    _id: String,
+
+    // Only found when inspecting containers.
     #[serde(rename = "State")]
-    state: InspectState,
+    state: Option<InspectState>,
+
+    // Only found when inspecting images.
+    #[serde(rename = "RepoTags")]
+    _repo_tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -43,6 +43,9 @@ struct Args {
     #[arg(long)]
     podman: bool,
 
+    #[arg(long)]
+    no_root: bool,
+
     #[arg(long, short, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
@@ -102,13 +105,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     };
-    if manager.is_podman() && system::getuid() != 0 {
+    if manager.is_podman() && system::getuid() != 0 && !args.no_root {
         error!("The Podman container manager requires running as root");
         std::process::exit(1);
     }
     info!("Found container manager {manager}");
 
     let mut context = Context { config, manager };
+
+    let suricata_image_name = container::image_name(&context, Container::Suricata);
+    if !manager.has_image(&suricata_image_name) {
+        info!(
+            "Suricata image {} not found, pulling...",
+            &suricata_image_name
+        );
+        if let Err(err) = manager.pull(&suricata_image_name) {
+            error!("Failed to pull Suricata image: {}", err);
+            std::process::exit(1);
+        }
+    } else {
+        info!("Found Suricata image: {}", &suricata_image_name);
+    }
+
+    let evebox_image_name = container::image_name(&context, Container::EveBox);
+    if !manager.has_image(&evebox_image_name) {
+        info!("EveBox image {} not found, pulling...", &evebox_image_name);
+        if let Err(err) = manager.pull(&evebox_image_name) {
+            error!("Failed to pull EveBox image: {}", err);
+            std::process::exit(1);
+        }
+    } else {
+        info!("Found EveBox image: {}", &evebox_image_name);
+    }
 
     if let Some(command) = args.command {
         let code = match command {
