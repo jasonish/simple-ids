@@ -102,11 +102,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
     };
-    if manager == container::ContainerManager::Podman && system::getuid() != 0 {
+    if manager.is_podman() && system::getuid() != 0 {
         error!("The Podman container manager requires running as root");
         std::process::exit(1);
     }
-    debug!("Found container manager {manager}");
+    info!("Found container manager {manager}");
 
     let mut context = Context { config, manager };
 
@@ -299,7 +299,7 @@ fn start_foreground(context: &Context) -> i32 {
 fn stop(context: &Context) -> bool {
     let mut ok = true;
 
-    if context.manager.exists(SURICATA_CONTAINER_NAME) {
+    if context.manager.container_exists(SURICATA_CONTAINER_NAME) {
         info!("Stopping {SURICATA_CONTAINER_NAME}");
         if let Err(err) = context.manager.stop(SURICATA_CONTAINER_NAME, None) {
             error!(
@@ -312,7 +312,7 @@ fn stop(context: &Context) -> bool {
     } else {
         info!("Container {SURICATA_CONTAINER_NAME} is not running");
     }
-    if context.manager.exists(EVEBOX_CONTAINER_NAME) {
+    if context.manager.container_exists(EVEBOX_CONTAINER_NAME) {
         info!("Stopping {EVEBOX_CONTAINER_NAME}");
         if let Err(err) = context.manager.stop(EVEBOX_CONTAINER_NAME, Some("SIGINT")) {
             error!("Failed to stop container {EVEBOX_CONTAINER_NAME}: {}", err);

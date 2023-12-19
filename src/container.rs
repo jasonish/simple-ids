@@ -13,6 +13,175 @@ use crate::{
 const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
 const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum ContainerManager {
+    Docker(DockerManager),
+    Podman(PodmanManager),
+}
+
+impl std::fmt::Display for ContainerManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            ContainerManager::Docker(_) => "Docker",
+            ContainerManager::Podman(_) => "Podman",
+        };
+        write!(f, "{name}")
+    }
+}
+
+impl ContainerManager {
+    pub(crate) fn command(&self) -> Command {
+        Command::new(self.bin())
+    }
+
+    pub(crate) fn bin(&self) -> &str {
+        match self {
+            Self::Docker(docker) => docker.bin(),
+            Self::Podman(podman) => podman.bin(),
+        }
+    }
+
+    /// Test if a container manager exists.
+    pub(crate) fn exists(&self) -> bool {
+        Command::new(self.bin())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok()
+    }
+
+    /// Return true if the container manager is Podman.
+    pub(crate) fn is_podman(&self) -> bool {
+        matches!(self, ContainerManager::Podman(_))
+    }
+
+    /// Return true if the container manager is Docker.
+    pub(crate) fn is_docker(&self) -> bool {
+        matches!(self, ContainerManager::Docker(_))
+    }
+
+    pub(crate) fn version(&self) -> Result<String> {
+        let output = self
+            .command()
+            .args(["version", "--format", "{{json . }}"])
+            .output()?;
+        if !output.status.success() {
+            bail!(String::from_utf8_lossy(&output.stderr).to_string());
+        } else if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+            if let Some(version) = json["Client"]["Version"].as_str() {
+                return Ok(version.to_string());
+            }
+            if let Some(version) = json["Version"].as_str() {
+                return Ok(version.to_string());
+            }
+        }
+        bail!(
+            "Failed to find {} version in output: {}",
+            self.to_string(),
+            String::from_utf8_lossy(&output.stdout).to_string()
+        );
+    }
+
+    /// Quietly remove container.
+    pub(crate) fn quiet_rm(&self, name: &str) {
+        let mut args = vec!["rm"];
+
+        // Podman needs to be a little more agressive here.
+        if self.is_podman() {
+            args.push("--force");
+        }
+
+        args.push(name);
+        let _ = self.command().args(&args).output();
+    }
+
+    pub(crate) fn stop(&self, name: &str, signal: Option<&str>) -> Result<()> {
+        let mut cmd = self.command();
+        cmd.arg("stop");
+
+        // Custom stop signals are not supported on Podman.
+        if self.is_docker() {
+            cmd.args(["--signal", signal.unwrap_or("SIGTERM")]);
+        }
+        cmd.arg(name);
+        let output = cmd.output()?;
+        if !output.status.success() {
+            bail!(String::from_utf8_lossy(&output.stderr).to_string());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn pull(&self, image: &str) -> Result<()> {
+        let status = self.command().args(["pull", image]).status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            bail!("Pull did not exit successfully")
+        }
+    }
+
+    fn inspect_first(&self, name: &str) -> Result<InspectEntry> {
+        let mut command = self.command();
+        command.args(["inspect", name]);
+        let mut entries: Vec<InspectEntry> = command_json(&mut command)?;
+        if entries.is_empty() {
+            bail!("{} returned unexpected empty inspect array", self);
+        } else {
+            Ok(entries.swap_remove(0))
+        }
+    }
+
+    pub(crate) fn is_running(&self, name: &str) -> bool {
+        if let Ok(inspect) = self.inspect_first(name) {
+            return inspect.state.running;
+        }
+        false
+    }
+
+    /// Return the Inspect.State object for a container.
+    ///
+    /// If the container doesn't exist an error is returned.
+    pub(crate) fn state(&self, name: &str) -> Result<InspectState> {
+        Ok(self.inspect_first(name)?.state)
+    }
+
+    /// Test if a container exists.
+    ///
+    /// Any failure results in false.
+    pub(crate) fn container_exists(&self, name: &str) -> bool {
+        if let Ok(output) = self.command().args(["inspect", name]).output() {
+            return output.status.success();
+        }
+        false
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) struct PodmanManager {}
+
+impl PodmanManager {
+    pub(crate) fn new() -> Self {
+        Self {}
+    }
+
+    pub(crate) fn bin(&self) -> &str {
+        "podman"
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) struct DockerManager {}
+
+impl DockerManager {
+    pub(crate) fn new() -> Self {
+        Self {}
+    }
+
+    pub(crate) fn bin(&self) -> &str {
+        "docker"
+    }
+}
+
 /// Command extensions useful for containers.
 pub(crate) trait CommandExt {
     /// Like `Command::output`, but return an error on command failure
@@ -65,98 +234,6 @@ pub(crate) struct InspectState {
     pub _exit_code: i32,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum ContainerManager {
-    Docker,
-    Podman,
-}
-
-impl ContainerManager {
-    pub(crate) fn command(&self) -> Command {
-        Command::new(self.bin())
-    }
-
-    pub(crate) fn bin(&self) -> &str {
-        match self {
-            ContainerManager::Docker => "docker",
-            ContainerManager::Podman => "podman",
-        }
-    }
-
-    pub(crate) fn pull(&self, image: &str) -> Result<()> {
-        let status = self.command().args(["pull", image]).status()?;
-        if status.success() {
-            Ok(())
-        } else {
-            bail!("Pull did not exit successfully")
-        }
-    }
-
-    /// Quietly remove container.
-    pub(crate) fn quiet_rm(&self, name: &str) {
-        let mut args = vec!["rm"];
-
-        // Podman needs to be a little more agressive here.
-        if self == &Self::Podman {
-            args.push("--force");
-        }
-
-        args.push(name);
-        let _ = self.command().args(&args).output();
-    }
-
-    /// Test if a container exists.
-    ///
-    /// Any failure results in false.
-    pub(crate) fn exists(&self, name: &str) -> bool {
-        if let Ok(output) = self.command().args(["inspect", name]).output() {
-            return output.status.success();
-        }
-        false
-    }
-
-    fn inspect_first(&self, name: &str) -> Result<InspectEntry> {
-        let mut command = self.command();
-        command.args(["inspect", name]);
-        let mut entries: Vec<InspectEntry> = command_json(&mut command)?;
-        if entries.is_empty() {
-            bail!("{} returned unexpected empty inspect array", self);
-        } else {
-            Ok(entries.swap_remove(0))
-        }
-    }
-
-    /// Return the Inspect.State object for a container.
-    ///
-    /// If the container doesn't exist an error is returned.
-    pub(crate) fn state(&self, name: &str) -> Result<InspectState> {
-        Ok(self.inspect_first(name)?.state)
-    }
-
-    pub(crate) fn is_running(&self, name: &str) -> bool {
-        if let Ok(inspect) = self.inspect_first(name) {
-            return inspect.state.running;
-        }
-        false
-    }
-
-    pub(crate) fn stop(&self, name: &str, signal: Option<&str>) -> Result<()> {
-        let mut cmd = self.command();
-        cmd.arg("stop");
-
-        // Custom stop signals are not supported on Podman.
-        if self == &Self::Docker {
-            cmd.args(["--signal", signal.unwrap_or("SIGTERM")]);
-        }
-        cmd.arg(name);
-        let output = cmd.output()?;
-        if !output.status.success() {
-            bail!(String::from_utf8_lossy(&output.stderr).to_string());
-        }
-        Ok(())
-    }
-}
-
 fn command_json<T>(command: &mut Command) -> Result<T>
 where
     T: serde::de::DeserializeOwned + std::fmt::Debug,
@@ -173,53 +250,16 @@ where
     }
 }
 
-impl std::fmt::Display for ContainerManager {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = match self {
-            ContainerManager::Docker => "Docker",
-            ContainerManager::Podman => "Podman",
-        };
-        write!(f, "{name}")
-    }
-}
-
-fn version(manager: ContainerManager) -> Result<String> {
-    let output = manager
-        .command()
-        .args(["version", "--format", "{{json . }}"])
-        .output()?;
-    if !output.status.success() {
-        bail!(String::from_utf8_lossy(&output.stderr).to_string());
-    } else if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-        if let Some(version) = json["Client"]["Version"].as_str() {
-            return Ok(version.to_string());
-        }
-        if let Some(version) = json["Version"].as_str() {
-            return Ok(version.to_string());
-        }
-    }
-    bail!(
-        "Failed to find {} version in output: {}",
-        manager.to_string(),
-        String::from_utf8_lossy(&output.stdout).to_string()
-    );
-}
-
-/// Return true if the program for the container manager exists.
-pub(crate) fn exists(manager: ContainerManager) -> bool {
-    manager.command().status().is_ok()
-}
-
 pub(crate) fn find_manager(podman: bool) -> Option<ContainerManager> {
     if !podman {
         debug!("Looking for Docker container engine");
-        let manager = ContainerManager::Docker;
-        if exists(manager) {
-            info!("Found Docker container engine");
-            if let Ok(version) = version(manager) {
-                debug!("Found Docker version {version}");
 
-                return Some(ContainerManager::Docker);
+        let manager = ContainerManager::Docker(DockerManager::new());
+        if manager.exists() {
+            info!("Found Docker container engine");
+            if let Ok(version) = manager.version() {
+                debug!("Found Docker version {version}");
+                return Some(manager);
             }
         } else {
             info!("Docker not found");
@@ -227,17 +267,17 @@ pub(crate) fn find_manager(podman: bool) -> Option<ContainerManager> {
     };
 
     debug!("Looking for Podman container engine");
-    let manager = ContainerManager::Podman;
-    if exists(manager) {
+    let manager = ContainerManager::Podman(PodmanManager::new());
+    if manager.exists() {
         info!("Found Podman container engine");
-        if let Ok(version) = version(manager) {
+        if let Ok(version) = manager.version() {
             debug!("Found Podman version {version}");
             match semver::Version::parse(&version) {
                 Ok(version) => {
                     if version.major < 4 || (version.major == 4 && version.minor < 6) {
                         error!("Podman version must be at least 4.7.0");
                     } else {
-                        return Some(ContainerManager::Podman);
+                        return Some(manager);
                     }
                 }
                 Err(_) => {
