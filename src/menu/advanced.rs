@@ -8,7 +8,7 @@ use crate::{
 
 pub(crate) fn advanced_menu(context: &mut Context) {
     loop {
-        crate::term::clear_title("Simple-IDS: Advanced Configuration");
+        crate::term::title("Simple-IDS: Advanced Configuration");
 
         let suricata_image_name = container::image_name(context, Container::Suricata);
         let evebox_image_name = container::image_name(context, Container::EveBox);

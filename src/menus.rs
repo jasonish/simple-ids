@@ -8,7 +8,7 @@ use crate::{
 
 pub(crate) fn other(context: &Context) {
     loop {
-        term::clear_title("Simple-IDS: Other Menu Items");
+        term::title("Simple-IDS: Other Menu Items");
 
         let selections = vec![
             SelectItem::new("rotate", "Force Log Rotation"),

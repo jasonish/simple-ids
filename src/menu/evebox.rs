@@ -14,7 +14,7 @@ pub(crate) fn configure(context: &mut Context) {
     let original_config = context.config.clone();
     let mut restart_required;
     loop {
-        term::clear_title("Simple-IDS: Configure EveBox");
+        term::title("Simple-IDS: Configure EveBox");
 
         let is_running = context.manager.is_running(EVEBOX_CONTAINER_NAME);
         restart_required = is_running && original_config != context.config;

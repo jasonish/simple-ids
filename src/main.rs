@@ -425,7 +425,7 @@ fn guess_evebox_url(context: &Context) -> String {
 
 fn menu_main(mut context: Context) {
     loop {
-        term::clear_title("Simple-IDS: Main Menu");
+        term::title("Simple-IDS: Main Menu");
 
         let evebox_url = guess_evebox_url(&context);
 
