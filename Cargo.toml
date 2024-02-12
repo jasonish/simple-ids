@@ -4,7 +4,7 @@ version = "0.2.0"
 authors = ["Jason Ish <jason@codemonkey.net>"]
 edition = "2021"
 description = "Simple-IDS with Suricata and EveBox"
-homepage = "https://github.com/jasonish/simple-ids"
+homepage = "https://evebox.org/simple-ids/"
 license = "MIT"
 
 # Some tweaks to reduce binary size.
@@ -14,22 +14,20 @@ lto = true
 codegen-units = 1
 
 [dependencies]
-anyhow = "1.0.75"
-clap = { version = "4.4.2", features = ["derive", "color"] }
-colored = "2.0.4"
+anyhow = "1.0.79"
+clap = { version = "4.5.0", features = ["derive", "color"] }
+colored = "2.1.0"
 crossterm = "0.27.0"
-ctrlc = "3.4.1"
+ctrlc = "3.4.2"
 inquire = "0.6.2"
-is-terminal = "0.4.9"
-libc = "0.2.147"
-regex = "1.9.5"
-reqwest = { version = "0.11.20", default_features = false, features = ["blocking", "rustls-tls"] }
-semver = "1.0.20"
-serde = { version = "1.0.188", features = ["derive"] }
-serde_json = "1.0.105"
-serde_yaml = "0.9.25"
-sha2 = "0.10.7"
-tempfile = "3.8.0"
-time = "0.3.30"
-tracing = "0.1.37"
-tracing-subscriber = "0.3.17"
+libc = "0.2.153"
+regex = "1.10.3"
+reqwest = { version = "0.11.24", default_features = false, features = ["blocking", "rustls-tls"] }
+semver = "1.0.21"
+serde = { version = "1.0.196", default_features = false, features = ["derive"] }
+serde_json = "1.0.113"
+serde_yaml = "0.9.31"
+sha2 = "0.10.8"
+tempfile = "3.10.0"
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
