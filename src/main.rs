@@ -37,7 +37,16 @@ const SURICATA_VOLUME_RUN: &str = "simple-ids-suricata-run";
 
 const EVEBOX_VOLUME_LIB: &str = "simple-ids-evebox-lib";
 
+fn get_clap_style() -> clap::builder::Styles {
+    clap::builder::Styles::styled()
+        .header(clap::builder::styling::AnsiColor::Yellow.on_default())
+        .usage(clap::builder::styling::AnsiColor::Green.on_default())
+        .literal(clap::builder::styling::AnsiColor::Green.on_default())
+        .placeholder(clap::builder::styling::AnsiColor::Green.on_default())
+}
+
 #[derive(Parser, Debug)]
+#[command(styles=get_clap_style())]
 struct Args {
     /// Use Podman, by default Docker is used if found
     #[arg(long)]
