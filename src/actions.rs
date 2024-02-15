@@ -7,9 +7,10 @@ use anyhow::{bail, Result};
 use tracing::error;
 
 use crate::container::{CommandExt, SuricataContainer};
+use crate::context::Context;
 use crate::ruleindex::RuleIndex;
+use crate::SURICATA_CONTAINER_NAME;
 use crate::{build_evebox_command, EVEBOX_CONTAINER_NAME};
-use crate::{Context, SURICATA_CONTAINER_NAME};
 
 pub(crate) fn force_suricata_logrotate(context: &Context) {
     let _ = context

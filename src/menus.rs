@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::{
-    actions, add_index, prompt, term, Context, SelectItem, EVEBOX_CONTAINER_NAME,
+    actions, add_index, context::Context, prompt, term, SelectItem, EVEBOX_CONTAINER_NAME,
     SURICATA_CONTAINER_NAME,
 };
 

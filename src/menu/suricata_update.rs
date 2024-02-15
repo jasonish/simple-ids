@@ -4,7 +4,8 @@
 use crate::{
     add_index,
     container::{self, CommandExt, Container, RunCommandBuilder},
-    prompt, term, Context, SelectItem,
+    context::Context,
+    prompt, term, SelectItem,
 };
 use anyhow::Result;
 use colored::Colorize;

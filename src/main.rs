@@ -11,14 +11,16 @@ use std::{
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use config::Config;
-use container::{Container, ContainerManager, SuricataContainer};
+use container::{Container, SuricataContainer};
 use logs::LogArgs;
 use tracing::{debug, error, info, warn, Level};
+
+use crate::context::Context;
 
 mod actions;
 mod config;
 mod container;
+mod context;
 mod logs;
 mod menu;
 mod menus;
@@ -58,6 +60,10 @@ struct Args {
     #[arg(long, short, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
+    /// Start with an emtpy config (will overwrite current config)
+    #[arg(long)]
+    reinit: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -83,12 +89,6 @@ enum Commands {
     Menu {
         menu: String,
     },
-}
-
-#[derive(Clone)]
-struct Context {
-    config: Config,
-    manager: ContainerManager,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

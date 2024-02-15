@@ -10,7 +10,7 @@ use std::{
 use clap::Parser;
 use regex::Regex;
 
-use crate::{Context, EVEBOX_CONTAINER_NAME, SURICATA_CONTAINER_NAME};
+use crate::{context::Context, EVEBOX_CONTAINER_NAME, SURICATA_CONTAINER_NAME};
 
 #[derive(Parser, Debug)]
 pub(crate) struct LogArgs {

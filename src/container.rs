@@ -7,7 +7,8 @@ use std::process::Command;
 use tracing::{debug, error, info};
 
 use crate::{
-    Context, EVEBOX_VOLUME_LIB, SURICATA_VOLUME_LIB, SURICATA_VOLUME_LOG, SURICATA_VOLUME_RUN,
+    context::Context, EVEBOX_VOLUME_LIB, SURICATA_VOLUME_LIB, SURICATA_VOLUME_LOG,
+    SURICATA_VOLUME_RUN,
 };
 
 const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
@@ -132,13 +133,13 @@ impl ContainerManager {
     }
 
     pub(crate) fn has_image(&self, name: &str) -> bool {
-	self.inspect_first(name).is_ok()
+        self.inspect_first(name).is_ok()
     }
 
     pub(crate) fn is_running(&self, name: &str) -> bool {
-	if let Ok(state) = self.state(name) {
-	    return state.running;
-	}
+        if let Ok(state) = self.state(name) {
+            return state.running;
+        }
         false
     }
 
@@ -146,10 +147,10 @@ impl ContainerManager {
     ///
     /// If the container doesn't exist an error is returned.
     pub(crate) fn state(&self, name: &str) -> Result<InspectState> {
-	match self.inspect_first(name)?.state {
-	    Some(state) => Ok(state),
-	    None => bail!("not a container"),
-	}
+        match self.inspect_first(name)?.state {
+            Some(state) => Ok(state),
+            None => bail!("not a container"),
+        }
     }
 
     /// Test if a container exists.

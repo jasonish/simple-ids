@@ -7,7 +7,8 @@ use crate::{
     actions, add_index,
     config::EveBoxConfig,
     container::{self, Container},
-    prompt, term, ArgBuilder, Context, SelectItem, EVEBOX_CONTAINER_NAME,
+    context::Context,
+    prompt, term, ArgBuilder, SelectItem, EVEBOX_CONTAINER_NAME,
 };
 
 pub(crate) fn configure(context: &mut Context) {

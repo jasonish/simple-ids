@@ -3,7 +3,8 @@
 
 use crate::{
     container::{self, Container},
-    Context, SelectItem,
+    context::Context,
+    SelectItem,
 };
 
 pub(crate) fn advanced_menu(context: &mut Context) {
