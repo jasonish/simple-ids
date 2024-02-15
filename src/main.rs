@@ -13,7 +13,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use container::{Container, SuricataContainer};
 use logs::LogArgs;
-use tracing::{debug, error, info, warn, Level};
+use tracing::{debug, error, info, Level};
 
 use crate::context::Context;
 
@@ -60,10 +60,6 @@ struct Args {
     #[arg(long, short, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
-    /// Start with an emtpy config (will overwrite current config)
-    #[arg(long)]
-    reinit: bool,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -91,18 +87,44 @@ enum Commands {
     },
 }
 
+fn is_interactive(command: &Option<Commands>) -> bool {
+    match command {
+        Some(command) => match command {
+            Commands::Start { debug: _ } => false,
+            Commands::Stop => false,
+            Commands::Status => false,
+            Commands::UpdateRules => false,
+            Commands::Update => false,
+            Commands::Logs(_) => false,
+            Commands::ConfigureMenu => true,
+            Commands::Menu { menu: _ } => true,
+        },
+        None => true,
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Mainly for use when developing...
     let _ = std::process::Command::new("stty").args(["sane"]).status();
 
     let args = Args::parse();
+    let is_interactive = is_interactive(&args.command);
 
     let log_level = if args.verbose > 0 {
         Level::DEBUG
     } else {
         Level::INFO
     };
-    tracing_subscriber::fmt().with_max_level(log_level).init();
+
+    if is_interactive {
+        tracing_subscriber::fmt()
+            .with_max_level(log_level)
+            .without_time()
+            .with_target(false)
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_max_level(log_level).init();
+    }
 
     let config = config::Config::new();
 
@@ -120,31 +142,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     info!("Found container manager {manager}");
 
-    let mut context = Context { config, manager };
+    let mut context = Context::new(config, manager);
 
-    let suricata_image_name = context.image_name(Container::Suricata);
-    if !manager.has_image(&suricata_image_name) {
-        info!(
-            "Suricata image {} not found, pulling...",
-            &suricata_image_name
-        );
-        if let Err(err) = manager.pull(&suricata_image_name) {
-            error!("Failed to pull Suricata image: {}", err);
-            std::process::exit(1);
+    let prompt_for_update = {
+        let mut not_found = false;
+        if !manager.has_image(&context.suricata_image) {
+            info!("Suricata image {} not found", &context.suricata_image);
+            not_found = true;
         }
-    } else {
-        info!("Found Suricata image: {}", &suricata_image_name);
-    }
+        if !manager.has_image(&context.evebox_image) {
+            info!("EveBox image {} not found", &context.evebox_image);
+            not_found = true
+        }
+        not_found
+    };
 
-    let evebox_image_name = context.image_name(Container::EveBox);
-    if !manager.has_image(&evebox_image_name) {
-        info!("EveBox image {} not found, pulling...", &evebox_image_name);
-        if let Err(err) = manager.pull(&evebox_image_name) {
-            error!("Failed to pull EveBox image: {}", err);
-            std::process::exit(1);
+    if prompt_for_update {
+        if let Ok(true) =
+            inquire::Confirm::new("Required container images not found, download now?")
+                .with_default(true)
+                .prompt()
+        {
+            if !update(&context) {
+                error!("Failed to downloading container images");
+                prompt::enter();
+            }
         }
-    } else {
-        info!("Found EveBox image: {}", &evebox_image_name);
     }
 
     if let Some(command) = args.command {
@@ -368,14 +391,16 @@ fn command_status(context: &Context) -> i32 {
     match context.manager.state(SURICATA_CONTAINER_NAME) {
         Ok(state) => info!("suricata: {}", state.status),
         Err(err) => {
-            warn!("suricata: {}", err);
+            let err = format!("{}", err);
+            error!("suricata: {}", err.trim_end());
             code = 1;
         }
     }
     match context.manager.state(EVEBOX_CONTAINER_NAME) {
         Ok(state) => info!("evebox: {}", state.status),
         Err(err) => {
-            warn!("evebox: {}", err);
+            let err = format!("{}", err);
+            error!("evebox: {}", err.trim_end());
             code = 1;
         }
     }
