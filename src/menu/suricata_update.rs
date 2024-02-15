@@ -3,7 +3,7 @@
 
 use crate::{
     add_index,
-    container::{self, CommandExt, Container, RunCommandBuilder},
+    container::{CommandExt, Container, RunCommandBuilder},
     context::Context,
     prompt, term, SelectItem,
 };
@@ -102,7 +102,7 @@ fn copy_suricata_update_template(context: &Context, filename: &str) -> Result<()
         "/usr/lib/suricata/python/suricata/update/configs/{}",
         filename
     );
-    let image = container::image_name(context, Container::Suricata);
+    let image = context.image_name(Container::Suricata);
     let output = RunCommandBuilder::new(context.manager, image)
         .rm()
         .args(&["cat", &source])

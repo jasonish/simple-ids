@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut context = Context { config, manager };
 
-    let suricata_image_name = container::image_name(&context, Container::Suricata);
+    let suricata_image_name = context.image_name(Container::Suricata);
     if !manager.has_image(&suricata_image_name) {
         info!(
             "Suricata image {} not found, pulling...",
@@ -136,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Found Suricata image: {}", &suricata_image_name);
     }
 
-    let evebox_image_name = container::image_name(&context, Container::EveBox);
+    let evebox_image_name = context.image_name(Container::EveBox);
     if !manager.has_image(&evebox_image_name) {
         info!("EveBox image {} not found, pulling...", &evebox_image_name);
         if let Err(err) = manager.pull(&evebox_image_name) {
@@ -568,7 +568,7 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
         args.add(format!("--volume={}", volume));
     }
 
-    args.add(container::image_name(context, Container::Suricata));
+    args.add(context.image_name(Container::Suricata));
     args.extend(&["-v", "-i", interface]);
 
     let mut command = context.manager.command();
@@ -635,7 +635,7 @@ fn build_evebox_command(context: &Context, daemon: bool) -> process::Command {
         args.add(format!("--volume={}", volume));
     }
 
-    args.add(container::image_name(context, Container::EveBox));
+    args.add(context.image_name(Container::EveBox));
     args.extend(&["evebox", "server"]);
 
     if context.config.evebox.no_tls {
@@ -694,8 +694,8 @@ fn select_interface(context: &mut Context) {
 fn update(context: &Context) -> bool {
     let mut ok = true;
     for image in [
-        container::image_name(context, Container::Suricata),
-        container::image_name(context, Container::EveBox),
+        context.image_name(Container::Suricata),
+        context.image_name(Container::EveBox),
     ] {
         if let Err(err) = context.manager.pull(&image) {
             error!("Failed to pull {image}: {err}");

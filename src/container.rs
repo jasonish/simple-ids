@@ -11,8 +11,8 @@ use crate::{
     SURICATA_VOLUME_RUN,
 };
 
-const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
-const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
+pub const DEFAULT_SURICATA_IMAGE: &str = "docker.io/jasonish/suricata:latest";
+pub const DEFAULT_EVEBOX_IMAGE: &str = "docker.io/jasonish/evebox:master";
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum ContainerManager {
@@ -331,27 +331,6 @@ impl Container {
     }
 }
 
-/// Given the context and a Container, return an image name, which is
-/// either the default or a user configured value.
-pub(crate) fn image_name(context: &Context, container: Container) -> String {
-    match container {
-        Container::Suricata => context
-            .config
-            .suricata
-            .image
-            .as_deref()
-            .unwrap_or(DEFAULT_SURICATA_IMAGE)
-            .to_string(),
-        Container::EveBox => context
-            .config
-            .evebox
-            .image
-            .as_deref()
-            .unwrap_or(DEFAULT_EVEBOX_IMAGE)
-            .to_string(),
-    }
-}
-
 pub(crate) struct SuricataContainer {
     context: Context,
 }
@@ -372,7 +351,7 @@ impl SuricataContainer {
     pub(crate) fn run(&self) -> RunCommandBuilder {
         let mut builder = RunCommandBuilder::new(
             self.context.manager,
-            image_name(&self.context, Container::Suricata),
+            self.context.image_name(Container::Suricata),
         );
         builder.volumes(&self.volumes());
         builder
