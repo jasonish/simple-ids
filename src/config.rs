@@ -20,6 +20,7 @@ pub(crate) struct Config {
 pub(crate) struct SuricataConfig {
     pub interfaces: Vec<String>,
     pub image: Option<String>,
+    pub bpf: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Eq, PartialEq)]

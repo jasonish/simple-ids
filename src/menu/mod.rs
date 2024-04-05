@@ -4,4 +4,5 @@
 pub(crate) mod advanced;
 pub(crate) mod configure;
 pub(crate) mod evebox;
+pub(crate) mod suricata;
 pub(crate) mod suricata_update;

@@ -614,6 +614,10 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
     args.add(context.image_name(Container::Suricata));
     args.extend(&["-v", "-i", interface]);
 
+    if let Some(bpf) = &context.config.suricata.bpf {
+        args.add(bpf);
+    }
+
     let mut command = context.manager.command();
     command.args(&args.args);
     Ok(command)
