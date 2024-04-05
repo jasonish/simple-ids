@@ -103,6 +103,18 @@ fn is_interactive(command: &Option<Commands>) -> bool {
     }
 }
 
+fn confirm(msg: &str) -> bool {
+    inquire::Confirm::new(msg).prompt().unwrap_or(false)
+}
+
+fn wizard(context: &mut Context) {
+    if context.config.suricata.interfaces.is_empty()
+        && confirm("No network interface configured, configure now?")
+    {
+        select_interface(context);
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Mainly for use when developing...
     let _ = std::process::Command::new("stty").args(["sane"]).status();
@@ -458,8 +470,14 @@ fn guess_evebox_url(context: &Context) -> String {
 }
 
 fn menu_main(mut context: Context) {
+    let mut first = true;
     loop {
         term::title("Simple-IDS: Main Menu");
+
+        if first {
+            first = false;
+            wizard(&mut context);
+        }
 
         let evebox_url = guess_evebox_url(&context);
 
