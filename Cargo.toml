@@ -5,6 +5,7 @@ authors = ["Jason Ish <jason@codemonkey.net>"]
 edition = "2021"
 description = "Simple-IDS with Suricata and EveBox"
 homepage = "https://evebox.org/simple-ids/"
+repository = "https://github.com/jasonish/simple-ids"
 license = "MIT"
 
 # Some tweaks to reduce binary size.
