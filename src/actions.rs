@@ -82,7 +82,7 @@ pub(crate) fn update_rules(context: &Context) -> Result<()> {
     let mut volumes = vec![];
 
     if let Ok(cdir) = std::env::current_dir() {
-        for filename in ["enable.conf", "disable.conf"] {
+        for filename in ["enable.conf", "disable.conf", "modify.conf"] {
             if cdir.join(filename).exists() {
                 volumes.push(format!(
                     "{}/{}:/etc/suricata/{}",

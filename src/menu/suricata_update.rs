@@ -20,6 +20,7 @@ pub(crate) fn menu(context: &mut Context) {
         let selections = vec![
             SelectItem::new("enable-conf", "Edit enable.conf"),
             SelectItem::new("disable-conf", "Edit disable.conf"),
+            SelectItem::new("modify-conf", "Edit modify.conf"),
             SelectItem::new("enable-ruleset", "Enable a Ruleset"),
             SelectItem::new("disable-ruleset", "Disable a Ruleset"),
             SelectItem::new("return", "Return"),
@@ -30,6 +31,7 @@ pub(crate) fn menu(context: &mut Context) {
             Ok(selection) => match selection.tag.as_ref() {
                 "disable-conf" => edit_file(context, "disable.conf"),
                 "enable-conf" => edit_file(context, "enable.conf"),
+                "modify-conf" => edit_file(context, "modify.conf"),
                 "enable-ruleset" => enable_ruleset(context),
                 "disable-ruleset" => disable_ruleset(context),
                 _ => return,
@@ -116,10 +118,12 @@ fn copy_suricata_update_template(context: &Context, filename: &str) -> Result<()
 fn edit_file(context: &Context, filename: &str) {
     let path = PathBuf::from(filename);
     if !path.exists() {
-        if let Ok(true) =
-            inquire::Confirm::new(&format!("Would you to start with a {} template", filename))
-                .with_default(true)
-                .prompt()
+        if let Ok(true) = inquire::Confirm::new(&format!(
+            "Would you like to start with a {} template",
+            filename
+        ))
+        .with_default(true)
+        .prompt()
         {
             if let Err(err) = copy_suricata_update_template(context, filename) {
                 error!(
