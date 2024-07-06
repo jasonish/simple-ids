@@ -623,9 +623,44 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
     Ok(command)
 }
 
+fn suricata_dump_config(context: &Context) -> Result<Vec<String>> {
+    context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
+    let mut command = build_suricata_command(context, false)?;
+    command.arg("--dump-config");
+    let output = command.output()?;
+    if output.status.success() {
+        let stdout = std::str::from_utf8(&output.stdout)?;
+        let lines: Vec<String> = stdout.lines().map(|s| s.to_string()).collect();
+        Ok(lines)
+    } else {
+        bail!("Failed to run --dump-config for Suricata")
+    }
+}
+
 fn start_suricata_detached(context: &Context) -> Result<()> {
+    let config = suricata_dump_config(context)?;
+    let mut set_args: Vec<String> = vec![
+        "app-layer.protocols.tls.ja4-fingerprints=true".to_string(),
+        "app-layer.protocols.quic.ja4-fingerprints=true".to_string(),
+    ];
+    let patterns = &[
+        regex::Regex::new(r"(outputs\.\d+\.eve-log\.types\.\d+\.tls)\s")?,
+        regex::Regex::new(r"(outputs\.\d+\.eve-log\.types\.\d+\.quic)\s")?,
+    ];
+    for line in &config {
+        for r in patterns {
+            if let Some(c) = r.captures(line) {
+                set_args.push(format!("{}.ja4=true", &c[1]));
+            }
+        }
+    }
+
     context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
     let mut command = build_suricata_command(context, true)?;
+    for s in &set_args {
+        command.arg("--set");
+        command.arg(s);
+    }
     let output = command.output()?;
     if !output.status.success() {
         bail!(String::from_utf8_lossy(&output.stderr).to_string());
