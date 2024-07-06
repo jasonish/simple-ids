@@ -24,6 +24,7 @@ mod context;
 mod logs;
 mod menu;
 mod menus;
+mod prelude;
 mod prompt;
 mod ruleindex;
 mod selfupdate;

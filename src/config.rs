@@ -6,7 +6,10 @@ use std::io::{Read, Write};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-const FILENAME: &str = "simple-ids.yml";
+use crate::prelude::*;
+
+const YAML_FILENAME: &str = "simple-ids.yml";
+const TOML_FILENAME: &str = "simple-ids.toml";
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Eq, PartialEq)]
 pub(crate) struct Config {
@@ -51,21 +54,37 @@ impl Default for EveBoxConfig {
 
 impl Config {
     pub(crate) fn new() -> Self {
-        if let Ok(config) = Self::read_file(FILENAME) {
-            match Self::parse(&config) {
+        if let Ok(buf) = Self::read_file(TOML_FILENAME) {
+            match Self::parse_toml(&buf) {
                 Err(err) => {
-                    tracing::error!("Failed to parse configuration file: {}", err);
+                    error!("Failed to parse configuration file: {}", err);
                 }
                 Ok(config) => return config,
             }
         }
+
+        if let Ok(config) = Self::read_file(YAML_FILENAME) {
+            match Self::parse_yaml(&config) {
+                Err(err) => {
+                    error!("Failed to parse configuration file: {}", err);
+                }
+                Ok(config) => return config,
+            }
+        }
+
         Self::default()
     }
 
     pub(crate) fn save(&self) -> Result<()> {
-        let mut file = std::fs::File::create(FILENAME)?;
-        let config = serde_yaml::to_string(self)?;
+        let mut file = std::fs::File::create(TOML_FILENAME)?;
+        let config = toml::to_string(self)?;
         file.write_all(config.as_bytes())?;
+
+        // Delete YAML_FILENAME if exists.
+        if std::fs::metadata(YAML_FILENAME).is_ok() {
+            std::fs::remove_file(YAML_FILENAME)?;
+        }
+
         Ok(())
     }
 
@@ -76,8 +95,11 @@ impl Config {
         Ok(buffer)
     }
 
-    fn parse(buf: &str) -> Result<Config> {
-        let config = serde_yaml::from_str(buf)?;
-        Ok(config)
+    fn parse_yaml(buf: &str) -> Result<Config> {
+        Ok(serde_yaml::from_str(buf)?)
+    }
+
+    fn parse_toml(buf: &str) -> Result<Config> {
+        Ok(toml::from_str(buf)?)
     }
 }
