@@ -18,8 +18,11 @@ pub(crate) struct Config {
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Eq, PartialEq)]
 pub(crate) struct SuricataConfig {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub interfaces: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bpf: Option<String>,
 }
 
@@ -31,6 +34,7 @@ pub(crate) struct EveBoxConfig {
     pub no_tls: bool,
     #[serde(rename = "no-auth", default)]
     pub no_auth: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
 }
 
