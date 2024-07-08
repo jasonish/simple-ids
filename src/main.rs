@@ -73,6 +73,7 @@ enum Commands {
         debug: bool,
     },
     Stop,
+    Restart,
     Status,
     UpdateRules,
     Update,
@@ -93,6 +94,7 @@ fn is_interactive(command: &Option<Commands>) -> bool {
         Some(command) => match command {
             Commands::Start { debug: _ } => false,
             Commands::Stop => false,
+            Commands::Restart => false,
             Commands::Status => false,
             Commands::UpdateRules => false,
             Commands::Update => false,
@@ -192,6 +194,10 @@ fn main() -> Result<()> {
                 } else {
                     1
                 }
+            }
+            Commands::Restart => {
+                stop(&context);
+                command_start(&context, true)
             }
             Commands::Status => command_status(&context),
             Commands::UpdateRules => {
@@ -519,20 +525,25 @@ fn menu_main(mut context: Context) -> Result<()> {
             .map(String::from)
             .unwrap_or_default();
 
-        let selections = vec![
-            SelectItem::new("refresh", "Refresh Status"),
-            if running {
-                SelectItem::new("stop", "Stop")
-            } else {
-                SelectItem::new("start", "Start")
-            },
-            SelectItem::new("interface", format!("Select Interface [{interface}]")),
-            SelectItem::new("update-rules", "Update Rules"),
-            SelectItem::new("update", "Update"),
-            SelectItem::new("configure", "Configure"),
-            SelectItem::new("other", "Other"),
-            SelectItem::new("exit", "Exit"),
-        ];
+        let mut selections = vec![SelectItem::new("refresh", "Refresh Status")];
+
+        if running {
+            selections.push(SelectItem::new("restart", "Restart"));
+            selections.push(SelectItem::new("stop", "Stop"));
+        } else {
+            selections.push(SelectItem::new("start", "Start"));
+        }
+
+        selections.push(SelectItem::new(
+            "interface",
+            format!("Select Interface [{interface}]"),
+        ));
+        selections.push(SelectItem::new("update-rules", "Update Rules"));
+        selections.push(SelectItem::new("update", "Update"));
+        selections.push(SelectItem::new("configure", "Configure"));
+        selections.push(SelectItem::new("other", "Other"));
+        selections.push(SelectItem::new("exit", "Exit"));
+
         let selections = add_index(&selections);
         let response = inquire::Select::new("Select a menu option", selections)
             .with_page_size(12)
@@ -547,6 +558,12 @@ fn menu_main(mut context: Context) -> Result<()> {
                 }
                 "stop" => {
                     if !stop(&context) {
+                        prompt::enter();
+                    }
+                }
+                "restart" => {
+                    stop(&context);
+                    if !start(&context) {
                         prompt::enter();
                     }
                 }
