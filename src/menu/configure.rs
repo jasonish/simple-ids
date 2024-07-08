@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: (C) 2021 Jason Ish <jason@codemonkey.net>
 // SPDX-License-Identifier: MIT
 
+use anyhow::Result;
+
 use crate::{add_index, context::Context, term, SelectItem};
 
 /// Main configure menu.
-pub(crate) fn main(context: &mut Context) {
+pub(crate) fn main(context: &mut Context) -> Result<()> {
     loop {
         term::title("Simple-IDS: Configure");
 
@@ -20,13 +22,15 @@ pub(crate) fn main(context: &mut Context) {
         match inquire::Select::new("Select menu option", selections).prompt() {
             Ok(selection) => match selection.tag.as_ref() {
                 "suricata" => crate::menu::suricata::menu(context),
-                "suricata-update" => crate::menu::suricata_update::menu(context),
+                "suricata-update" => crate::menu::suricata_update::menu(context)?,
                 "evebox" => crate::menu::evebox::configure(context),
                 "advanced" => crate::menu::advanced::advanced_menu(context),
-                "return" => return,
+                "return" => return Ok(()),
                 _ => unimplemented!(),
             },
-            Err(_) => return,
+            Err(_) => break,
         }
     }
+
+    Ok(())
 }

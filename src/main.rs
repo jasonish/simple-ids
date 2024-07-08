@@ -116,7 +116,7 @@ fn wizard(context: &mut Context) {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     // Mainly for use when developing...
     let _ = std::process::Command::new("stty").args(["sane"]).status();
 
@@ -209,7 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Commands::ConfigureMenu => {
-                menu::configure::main(&mut context);
+                menu::configure::main(&mut context)?;
                 0
             }
             Commands::Logs(args) => {
@@ -226,7 +226,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         std::process::exit(code);
     } else {
-        menu_main(context);
+        menu_main(context)?;
     }
 
     Ok(())
@@ -470,7 +470,7 @@ fn guess_evebox_url(context: &Context) -> String {
     }
 }
 
-fn menu_main(mut context: Context) {
+fn menu_main(mut context: Context) -> Result<()> {
     let mut first = true;
     loop {
         term::title("Simple-IDS: Main Menu");
@@ -556,7 +556,7 @@ fn menu_main(mut context: Context) {
                     prompt::enter();
                 }
                 "other" => menus::other(&context),
-                "configure" => menu::configure::main(&mut context),
+                "configure" => menu::configure::main(&mut context)?,
                 "update-rules" => {
                     if let Err(err) = actions::update_rules(&context) {
                         error!("{}", err);
@@ -569,6 +569,8 @@ fn menu_main(mut context: Context) {
             Err(_) => break,
         }
     }
+
+    Ok(())
 }
 
 /// Returns true if everything started successfully, otherwise false

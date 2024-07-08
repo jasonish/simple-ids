@@ -13,7 +13,7 @@ use std::{io::Write, path::PathBuf};
 use tracing::error;
 
 /// Suricata configure menu.
-pub(crate) fn menu(context: &mut Context) {
+pub(crate) fn menu(context: &mut Context) -> Result<()> {
     loop {
         term::title("Simple-IDS: Configure Suricata-Update");
 
@@ -32,20 +32,22 @@ pub(crate) fn menu(context: &mut Context) {
                 "disable-conf" => edit_file(context, "disable.conf"),
                 "enable-conf" => edit_file(context, "enable.conf"),
                 "modify-conf" => edit_file(context, "modify.conf"),
-                "enable-ruleset" => enable_ruleset(context),
-                "disable-ruleset" => disable_ruleset(context),
-                _ => return,
+                "enable-ruleset" => enable_ruleset(context).unwrap(),
+                "disable-ruleset" => disable_ruleset(context).unwrap(),
+                _ => break,
             },
-            Err(_) => return,
+            Err(_) => break,
         }
     }
+
+    Ok(())
 }
 
-fn disable_ruleset(context: &Context) {
+fn disable_ruleset(context: &Context) -> Result<()> {
     let enabled = crate::actions::get_enabled_ruleset(context).unwrap();
     if enabled.is_empty() {
         prompt::enter_with_prefix("No rulesets enabled");
-        return;
+        return Ok(());
     }
 
     let index = crate::actions::load_rule_index(context).unwrap();
@@ -64,11 +66,21 @@ fn disable_ruleset(context: &Context) {
             .prompt()
     {
         let _ = crate::actions::disable_ruleset(context, &selection.tag);
+
+        if prompt::confirm(
+            "Would you like to update your rules now?",
+            Some("A rule update is required to complete disabling this ruleset"),
+        ) {
+            crate::actions::update_rules(context)?;
+        }
+
         prompt::enter();
     }
+
+    Ok(())
 }
 
-fn enable_ruleset(context: &Context) {
+fn enable_ruleset(context: &Context) -> Result<()> {
     let index = crate::actions::load_rule_index(context).unwrap();
     let enabled = crate::actions::get_enabled_ruleset(context).unwrap();
     let mut selections = vec![];
@@ -95,8 +107,18 @@ fn enable_ruleset(context: &Context) {
             .prompt()
     {
         let _ = crate::actions::enable_ruleset(context, &selection.tag);
+
+        if prompt::confirm(
+            "Would you like to update your rules now?",
+            Some("A rule update is require to make the new ruleset active"),
+        ) {
+            crate::actions::update_rules(context)?;
+        }
+
         prompt::enter();
     }
+
+    Ok(())
 }
 
 fn copy_suricata_update_template(context: &Context, filename: &str) -> Result<()> {
