@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 use crate::{
-    add_index,
     container::{CommandExt, Container, RunCommandBuilder},
     context::Context,
-    prompt, term, SelectItem,
+    term,
 };
 use anyhow::Result;
 use colored::Colorize;
@@ -17,18 +16,17 @@ pub(crate) fn menu(context: &mut Context) -> Result<()> {
     loop {
         term::title("Simple-IDS: Configure Suricata-Update");
 
-        let selections = vec![
-            SelectItem::new("enable-conf", "Edit enable.conf"),
-            SelectItem::new("disable-conf", "Edit disable.conf"),
-            SelectItem::new("modify-conf", "Edit modify.conf"),
-            SelectItem::new("enable-ruleset", "Enable a Ruleset"),
-            SelectItem::new("disable-ruleset", "Disable a Ruleset"),
-            SelectItem::new("return", "Return"),
-        ];
-        let selections = add_index(&selections);
+        let selections = evectl::prompt::Selections::with_index()
+            .push("enable-conf", "Edit enable.conf")
+            .push("disable-conf", "Edit disable.conf")
+            .push("modify-conf", "Edit modify.conf")
+            .push("enable-ruleset", "Enable a Ruleset")
+            .push("disable-ruleset", "Disable a Ruleset")
+            .push("return", "Return")
+            .to_vec();
 
         match inquire::Select::new("Select menu option", selections).prompt() {
-            Ok(selection) => match selection.tag.as_ref() {
+            Ok(selection) => match selection.tag {
                 "disable-conf" => edit_file(context, "disable.conf"),
                 "enable-conf" => edit_file(context, "enable.conf"),
                 "modify-conf" => edit_file(context, "modify.conf"),
@@ -46,35 +44,37 @@ pub(crate) fn menu(context: &mut Context) -> Result<()> {
 fn disable_ruleset(context: &Context) -> Result<()> {
     let enabled = crate::actions::get_enabled_ruleset(context).unwrap();
     if enabled.is_empty() {
-        prompt::enter_with_prefix("No rulesets enabled");
+        evectl::prompt::enter_with_prefix("No rulesets enabled");
         return Ok(());
     }
 
     let index = crate::actions::load_rule_index(context).unwrap();
-    let mut selections = vec![];
+    let mut selections = evectl::prompt::Selections::new();
 
     for (id, source) in &index.sources {
         if enabled.contains(id) {
             let message = format!("{}: {}", id, source.summary.green().italic());
-            selections.push(SelectItem::new(id, message));
+            selections.push(id, message);
         }
     }
 
-    if let Ok(selection) =
-        inquire::Select::new("Choose a ruleset to DISABLE or ESC to exit", selections)
-            .with_page_size(16)
-            .prompt()
+    if let Ok(selection) = inquire::Select::new(
+        "Choose a ruleset to DISABLE or ESC to exit",
+        selections.to_vec(),
+    )
+    .with_page_size(16)
+    .prompt()
     {
-        let _ = crate::actions::disable_ruleset(context, &selection.tag);
+        let _ = crate::actions::disable_ruleset(context, selection.tag);
 
-        if prompt::confirm(
+        if evectl::prompt::confirm(
             "Would you like to update your rules now?",
             Some("A rule update is required to complete disabling this ruleset"),
         ) {
             crate::actions::update_rules(context)?;
         }
 
-        prompt::enter();
+        evectl::prompt::enter();
     }
 
     Ok(())
@@ -83,7 +83,7 @@ fn disable_ruleset(context: &Context) -> Result<()> {
 fn enable_ruleset(context: &Context) -> Result<()> {
     let index = crate::actions::load_rule_index(context).unwrap();
     let enabled = crate::actions::get_enabled_ruleset(context).unwrap();
-    let mut selections = vec![];
+    let mut selections = evectl::prompt::Selections::new();
 
     for (id, source) in &index.sources {
         if source.obsolete.is_some() {
@@ -98,24 +98,26 @@ fn enable_ruleset(context: &Context) -> Result<()> {
 
         let message = format!("{}: {}", id, source.summary.green().italic());
 
-        selections.push(SelectItem::new(id, message));
+        selections.push(id, message);
     }
 
-    if let Ok(selection) =
-        inquire::Select::new("Choose a ruleset to enable or ESC to exit", selections)
-            .with_page_size(16)
-            .prompt()
+    if let Ok(selection) = inquire::Select::new(
+        "Choose a ruleset to enable or ESC to exit",
+        selections.to_vec(),
+    )
+    .with_page_size(16)
+    .prompt()
     {
-        let _ = crate::actions::enable_ruleset(context, &selection.tag);
+        let _ = crate::actions::enable_ruleset(context, selection.tag);
 
-        if prompt::confirm(
+        if evectl::prompt::confirm(
             "Would you like to update your rules now?",
             Some("A rule update is require to make the new ruleset active"),
         ) {
             crate::actions::update_rules(context)?;
         }
 
-        prompt::enter();
+        evectl::prompt::enter();
     }
 
     Ok(())
@@ -152,7 +154,7 @@ fn edit_file(context: &Context, filename: &str) {
                     "Sorry, an error occurred copying the template for {}: {}",
                     filename, err
                 );
-                prompt::enter();
+                evectl::prompt::enter();
             }
         }
     }

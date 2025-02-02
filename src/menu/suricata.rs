@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2024 Jason Ish <jason@codemonkey.net>
 // SPDX-License-Identifier: MIT
 
-use crate::{add_index, context::Context, term, SelectItem};
+use crate::{context::Context, term};
 
 pub(crate) fn menu(context: &mut Context) {
     loop {
@@ -13,15 +13,12 @@ pub(crate) fn menu(context: &mut Context) {
             "".to_string()
         };
 
-        let selections = vec![
-            SelectItem::new("bpf-filter", format!("BPF filter{}", current_bpf)),
-            SelectItem::new("return", "Return"),
-        ];
+        let mut selections = evectl::prompt::Selections::with_index();
+        selections.push("bpf-filter", format!("BPF filter{}", current_bpf));
+        selections.push("return", "Return");
 
-        let selections = add_index(&selections);
-
-        match inquire::Select::new("Select an option", selections).prompt() {
-            Ok(selection) => match selection.tag.as_ref() {
+        match inquire::Select::new("Select an option", selections.to_vec()).prompt() {
+            Ok(selection) => match selection.tag {
                 "bpf-filter" => set_bpf_filter(context),
                 _ => return,
             },

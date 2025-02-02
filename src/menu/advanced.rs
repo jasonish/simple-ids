@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2023 Jason Ish <jason@codemonkey.net>
 // SPDX-License-Identifier: MIT
 
-use crate::{container::Container, context::Context, SelectItem};
+use crate::{container::Container, context::Context};
 
 pub(crate) fn advanced_menu(context: &mut Context) {
     loop {
@@ -10,17 +10,17 @@ pub(crate) fn advanced_menu(context: &mut Context) {
         let suricata_image_name = context.image_name(Container::Suricata);
         let evebox_image_name = context.image_name(Container::EveBox);
 
-        let selections = vec![
-            SelectItem::new(
+        let selections = evectl::prompt::Selections::new()
+            .push(
                 "suricata",
                 format!("Suricata Container: {}", suricata_image_name),
-            ),
-            SelectItem::new("evebox", format!("EveBox Container: {}", evebox_image_name)),
-            SelectItem::new("return", "Return"),
-        ];
+            )
+            .push("evebox", format!("EveBox Container: {}", evebox_image_name))
+            .push("return", "Return")
+            .to_vec();
 
         match inquire::Select::new("Select container to configure", selections).prompt() {
-            Ok(selection) => match selection.tag.as_ref() {
+            Ok(selection) => match selection.tag {
                 "suricata" => {
                     set_suricata_image(context, &suricata_image_name);
                 }

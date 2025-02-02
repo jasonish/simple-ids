@@ -25,7 +25,6 @@ mod logs;
 mod menu;
 mod menus;
 mod prelude;
-mod prompt;
 mod ruleindex;
 mod selfupdate;
 mod term;
@@ -179,7 +178,7 @@ fn main() -> Result<()> {
         {
             if !update(&context) {
                 error!("Failed to downloading container images");
-                prompt::enter();
+                evectl::prompt::enter();
             }
         }
     }
@@ -524,52 +523,47 @@ fn menu_main(mut context: Context) -> Result<()> {
             .map(String::from)
             .unwrap_or_default();
 
-        let mut selections = vec![SelectItem::new("refresh", "Refresh Status")];
-
+        let mut selections = evectl::prompt::Selections::with_index();
+        selections.push("refresh", "Refresh Status");
         if running {
-            selections.push(SelectItem::new("restart", "Restart"));
-            selections.push(SelectItem::new("stop", "Stop"));
+            selections.push("restart", "Restart");
+            selections.push("stop", "Stop");
         } else {
-            selections.push(SelectItem::new("start", "Start"));
+            selections.push("start", "Start");
         }
+        selections.push("interface", format!("Select Interface [{interface}]"));
+        selections.push("update-rules", "Update Rules");
+        selections.push("update", "Update");
+        selections.push("configure", "Configure");
+        selections.push("other", "Other");
+        selections.push("exit", "Exit");
 
-        selections.push(SelectItem::new(
-            "interface",
-            format!("Select Interface [{interface}]"),
-        ));
-        selections.push(SelectItem::new("update-rules", "Update Rules"));
-        selections.push(SelectItem::new("update", "Update"));
-        selections.push(SelectItem::new("configure", "Configure"));
-        selections.push(SelectItem::new("other", "Other"));
-        selections.push(SelectItem::new("exit", "Exit"));
-
-        let selections = add_index(&selections);
-        let response = inquire::Select::new("Select a menu option", selections)
+        let response = inquire::Select::new("Select a menu option", selections.to_vec())
             .with_page_size(12)
             .prompt();
         match response {
-            Ok(selection) => match selection.tag.as_ref() {
+            Ok(selection) => match selection.tag {
                 "refresh" => {}
                 "start" => {
                     if !start(&context) {
-                        prompt::enter();
+                        evectl::prompt::enter();
                     }
                 }
                 "stop" => {
                     if !stop(&context) {
-                        prompt::enter();
+                        evectl::prompt::enter();
                     }
                 }
                 "restart" => {
                     stop(&context);
                     if !start(&context) {
-                        prompt::enter();
+                        evectl::prompt::enter();
                     }
                 }
                 "interface" => select_interface(&mut context),
                 "update" => {
                     update(&context);
-                    prompt::enter();
+                    evectl::prompt::enter();
                 }
                 "other" => menus::other(&context),
                 "configure" => menu::configure::main(&mut context)?,
@@ -577,7 +571,7 @@ fn menu_main(mut context: Context) -> Result<()> {
                     if let Err(err) = actions::update_rules(&context) {
                         error!("{}", err);
                     }
-                    prompt::enter();
+                    evectl::prompt::enter();
                 }
                 "exit" => break,
                 _ => panic!("Unhandled selection: {}", selection.tag),
@@ -764,22 +758,22 @@ fn select_interface(context: &mut Context) {
         .iter()
         .position(|interface| Some(&interface.name) == current_if)
         .unwrap_or(0);
-    let selections: Vec<SelectItem> = interfaces
-        .iter()
-        .enumerate()
-        .map(|(i, ifname)| {
-            let address = ifname
-                .addr4
-                .first()
-                .map(|s| format!("-- {}", s.green().italic()))
-                .unwrap_or("".to_string());
-            SelectItem::new(
-                ifname.name.to_string(),
-                format!("{}) {} {}", i + 1, ifname.name, address),
-            )
-        })
-        .collect();
-    match inquire::Select::new("Select interface", selections)
+
+    let mut selections = evectl::prompt::Selections::with_index();
+
+    for interface in &interfaces {
+        let address = interface
+            .addr4
+            .first()
+            .map(|s| format!("-- {}", s.green().italic()))
+            .unwrap_or("".to_string());
+        selections.push(
+            interface.name.to_string(),
+            format!("{} {}", &interface.name, address),
+        );
+    }
+
+    match inquire::Select::new("Select interface", selections.to_vec())
         .with_starting_cursor(index)
         .with_page_size(12)
         .prompt()
@@ -808,35 +802,6 @@ fn update(context: &Context) -> bool {
         ok = false;
     }
     ok
-}
-
-#[derive(Debug, Clone)]
-struct SelectItem {
-    tag: String,
-    label: String,
-}
-
-impl SelectItem {
-    fn new(tag: impl Into<String>, label: impl Into<String>) -> Self {
-        Self {
-            tag: tag.into(),
-            label: label.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for SelectItem {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.label)
-    }
-}
-
-fn add_index(selections: &[SelectItem]) -> Vec<SelectItem> {
-    selections
-        .iter()
-        .enumerate()
-        .map(|(i, e)| SelectItem::new(e.tag.to_string(), format!("{}. {}", i + 1, e.label)))
-        .collect()
 }
 
 /// Utility for building arguments for commands.

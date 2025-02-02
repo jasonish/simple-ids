@@ -4,8 +4,8 @@
 use tracing::{error, info, warn};
 
 use crate::{
-    actions, add_index, config::EveBoxConfig, container::Container, context::Context, prompt, term,
-    ArgBuilder, SelectItem, EVEBOX_CONTAINER_NAME,
+    actions, config::EveBoxConfig, container::Container, context::Context, term, ArgBuilder,
+    EVEBOX_CONTAINER_NAME,
 };
 
 pub(crate) fn configure(context: &mut Context) {
@@ -17,47 +17,48 @@ pub(crate) fn configure(context: &mut Context) {
         let is_running = context.manager.is_running(EVEBOX_CONTAINER_NAME);
         restart_required = is_running && original_config != context.config;
 
-        let selections = vec![
-            if context.config.evebox.allow_remote {
-                SelectItem::new("disable-remote", "Disable Remote Access")
-            } else {
-                SelectItem::new("enable-remote", "Enable Remote Access")
-            },
-            SelectItem::new(
-                "toggle-tls",
-                format!(
-                    "Toggle TLS (Currently {})",
-                    if context.config.evebox.no_tls {
-                        "disabled"
-                    } else {
-                        "enabled"
-                    }
-                ),
-            ),
-            SelectItem::new(
-                "toggle-auth",
-                format!(
-                    "Toggle authentication (Currently {})",
-                    if context.config.evebox.no_auth {
-                        "disabled"
-                    } else {
-                        "enabled"
-                    }
-                ),
-            ),
-            SelectItem::new("reset-password", "Reset Admin Password"),
-            SelectItem::new(
-                "return",
-                if restart_required {
-                    "Restart and Return"
+        let mut selections = evectl::prompt::Selections::with_index();
+        if context.config.evebox.allow_remote {
+            selections.push("disable-remote", "Disable Remote Access");
+        } else {
+            selections.push("enable-remote", "Enable Remote Access");
+        }
+        selections.push(
+            "toggle-tls",
+            format!(
+                "Toggle TLS (Currently {})",
+                if context.config.evebox.no_tls {
+                    "disabled"
                 } else {
-                    "Return"
-                },
+                    "enabled"
+                }
             ),
-        ];
-        let selections = add_index(&selections);
-        if let Ok(selection) = inquire::Select::new("Select menu option", selections).prompt() {
-            match selection.tag.as_ref() {
+        );
+        selections.push(
+            "toggle-auth",
+            format!(
+                "Toggle authentication (Currently {})",
+                if context.config.evebox.no_auth {
+                    "disabled"
+                } else {
+                    "enabled"
+                }
+            ),
+        );
+        selections.push("reset-password", "Reset Admin Password");
+        selections.push(
+            "return",
+            if restart_required {
+                "Restart and Return"
+            } else {
+                "Return"
+            },
+        );
+
+        if let Ok(selection) =
+            inquire::Select::new("Select menu option", selections.to_vec()).prompt()
+        {
+            match selection.tag {
                 "toggle-tls" => toggle_tls(&mut context.config.evebox),
                 "toggle-auth" => toggle_auth(&mut context.config.evebox),
                 "reset-password" => reset_password(context),
@@ -75,7 +76,7 @@ pub(crate) fn configure(context: &mut Context) {
         info!("Saving configuration changes");
         if let Err(err) = context.config.save() {
             error!("Failed to save configuration changes: {err}");
-            prompt::enter();
+            evectl::prompt::enter();
         }
     }
     if restart_required {
@@ -146,7 +147,7 @@ fn enable_remote_access(context: &mut Context) {
         let _ = actions::stop_evebox(context);
         let _ = actions::start_evebox(context);
     }
-    prompt::enter_with_prefix("EveBox remote access has been enabled");
+    evectl::prompt::enter_with_prefix("EveBox remote access has been enabled");
 }
 
 fn disable_remote_access(context: &mut Context) {
