@@ -14,10 +14,13 @@ pub(crate) struct Context {
     // Stash some image names for easy access.
     pub suricata_image: String,
     pub evebox_image: String,
+
+    // Don't apply Suricata fixups.
+    pub no_fixups: bool,
 }
 
 impl Context {
-    pub(crate) fn new(config: Config, manager: ContainerManager) -> Self {
+    pub(crate) fn new(config: Config, manager: ContainerManager, no_fixups: bool) -> Self {
         let suricata_image = image_name(&config, Container::Suricata);
         let evebox_image = image_name(&config, Container::EveBox);
         Self {
@@ -25,6 +28,7 @@ impl Context {
             manager,
             suricata_image,
             evebox_image,
+            no_fixups,
         }
     }
 

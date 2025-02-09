@@ -59,6 +59,9 @@ struct Args {
     #[arg(long, short, global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
+    #[arg(long, help = "Don't apply Suricata fix-ups")]
+    no_fixups: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -155,7 +158,7 @@ fn main() -> Result<()> {
     }
     info!("Found container manager {manager}");
 
-    let mut context = Context::new(config, manager);
+    let mut context = Context::new(config, manager, args.no_fixups);
 
     let prompt_for_update = {
         let mut not_found = false;
@@ -620,12 +623,27 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
         args.add("-d");
     }
 
+    if !context.no_fixups {
+        // Write out af-packet stub for fixed af-packet.
+        let path = std::env::current_dir()?.join("af-packet.yaml");
+        evectl::configs::write_af_packet_stub(&path)?;
+        args.add(format!(
+            "--volume={}:/config/af-packet.yaml",
+            path.display()
+        ));
+    }
+
     for volume in SuricataContainer::new(context.clone()).volumes() {
         args.add(format!("--volume={}", volume));
     }
 
     args.add(context.image_name(Container::Suricata));
     args.extend(&["-v", "-i", interface]);
+
+    if !context.no_fixups {
+        args.add("--include");
+        args.add("/config/af-packet.yaml");
+    }
 
     if let Some(bpf) = &context.config.suricata.bpf {
         args.add(bpf);
