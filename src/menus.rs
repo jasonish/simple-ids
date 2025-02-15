@@ -11,6 +11,7 @@ pub(crate) fn other(context: &Context) {
             .push("rotate", "Force Log Rotation")
             .push("suricata-shell", "Suricata Shell")
             .push("evebox-shell", "EveBox Shell")
+            .push("remove", "Remove Simple-IDS data")
             .push("return", "Return")
             .to_vec();
 
@@ -49,6 +50,17 @@ pub(crate) fn other(context: &Context) {
                             "/bin/sh",
                         ])
                         .status();
+                }
+                "remove" => {
+                    if inquire::Confirm::new("Are you sure you want to remove Simple-IDS data?")
+                        .with_default(false)
+                        .prompt_skippable()
+                        .unwrap()
+                        .unwrap_or(false)
+                    {
+                        crate::remove(context);
+                        std::process::exit(0);
+                    }
                 }
                 _ => {}
             },

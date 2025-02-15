@@ -88,6 +88,9 @@ enum Commands {
     Menu {
         menu: String,
     },
+
+    /// Remove containers and data.
+    Remove,
 }
 
 fn is_interactive(command: &Option<Commands>) -> bool {
@@ -102,6 +105,7 @@ fn is_interactive(command: &Option<Commands>) -> bool {
             Commands::Logs(_) => false,
             Commands::ConfigureMenu => true,
             Commands::Menu { menu: _ } => true,
+            Commands::Remove => false,
         },
         None => true,
     }
@@ -161,16 +165,20 @@ fn main() -> Result<()> {
     let mut context = Context::new(config, manager, args.no_fixups);
 
     let prompt_for_update = {
-        let mut not_found = false;
-        if !manager.has_image(&context.suricata_image) {
-            info!("Suricata image {} not found", &context.suricata_image);
-            not_found = true;
+        if let Some(Commands::Remove) = args.command {
+            false
+        } else {
+            let mut not_found = false;
+            if !manager.has_image(&context.suricata_image) {
+                info!("Suricata image {} not found", &context.suricata_image);
+                not_found = true;
+            }
+            if !manager.has_image(&context.evebox_image) {
+                info!("EveBox image {} not found", &context.evebox_image);
+                not_found = true
+            }
+            not_found
         }
-        if !manager.has_image(&context.evebox_image) {
-            info!("EveBox image {} not found", &context.evebox_image);
-            not_found = true
-        }
-        not_found
     };
 
     if prompt_for_update {
@@ -230,6 +238,10 @@ fn main() -> Result<()> {
                 }
                 _ => panic!("Unhandled menu: {}", menu),
             },
+            Commands::Remove => {
+                remove(&context);
+                0
+            }
         };
         std::process::exit(code);
     } else {
@@ -820,6 +832,64 @@ fn update(context: &Context) -> bool {
         ok = false;
     }
     ok
+}
+
+fn remove(context: &Context) {
+    info!("Stopping Suricata...");
+    if let Err(err) = context.manager.stop(SURICATA_CONTAINER_NAME, None) {
+        error!("Failed to stop Suricata: {}", err.to_string().trim());
+    }
+    info!("Stopping EveBox...");
+    if let Err(err) = context.manager.stop(EVEBOX_CONTAINER_NAME, None) {
+        error!("Failed to stop EveBox: {}", err.to_string().trim());
+    }
+    info!("Removing Suricata container");
+    context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
+    info!("Removing EveBox container");
+    context.manager.quiet_rm(EVEBOX_CONTAINER_NAME);
+
+    let volumes = [
+        "simple-ids-evebox-lib",
+        "simple-ids-suricata-lib",
+        "simple-ids-suricata-log",
+        "simple-ids-suricata-run",
+    ];
+    for volume in &volumes {
+        info!("Removing volume {volume}");
+        match context
+            .manager
+            .command()
+            .args(["volume", "rm", volume])
+            .status()
+        {
+            Ok(_status) => {}
+            Err(err) => {
+                error!("Failed to remove volume {volume}: {err}");
+            }
+        }
+    }
+
+    for image in [
+        context.image_name(Container::Suricata),
+        context.image_name(Container::EveBox),
+    ] {
+        info!("Removing image {image}");
+        match context
+            .manager
+            .command()
+            .args(["image", "rmi", &image])
+            .status()
+        {
+            Ok(_status) => {}
+            Err(err) => {
+                error!("Failed to remove image {image}: {err}");
+            }
+        }
+    }
+
+    println!();
+    info!("Simple-IDS containers and data have been removed.");
+    info!("You may now remove the Simple-IDS program and configuration file (simple-ids.toml).");
 }
 
 /// Utility for building arguments for commands.
