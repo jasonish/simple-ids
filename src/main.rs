@@ -304,7 +304,7 @@ fn start_foreground(context: &Context) -> i32 {
     context.manager.quiet_rm(EVEBOX_CONTAINER_NAME);
 
     let (tx, rx) = std::sync::mpsc::channel::<bool>();
-    let mut suricata_command = match build_suricata_command(context, false) {
+    let mut suricata_command = match build_suricata_command(context, false, true) {
         Ok(command) => command,
         Err(err) => {
             error!("Invalid Suricata configuration: {}", err);
@@ -615,7 +615,7 @@ fn start(context: &Context) -> bool {
     ok
 }
 
-fn build_suricata_command(context: &Context, detached: bool) -> Result<std::process::Command> {
+fn build_suricata_command(context: &Context, detached: bool, stubs: bool) -> Result<std::process::Command> {
     let interface = match context.config.suricata.interfaces.first() {
         Some(interface) => interface,
         None => bail!("no network interface set"),
@@ -635,7 +635,7 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
         args.add("-d");
     }
 
-    if !context.no_fixups {
+    if !context.no_fixups && stubs {
         // Write out af-packet stub for fixed af-packet.
         let path = std::env::current_dir()?.join("af-packet.yaml");
         evectl::configs::write_af_packet_stub(&path)?;
@@ -652,7 +652,7 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
     args.add(context.image_name(Container::Suricata));
     args.extend(&["-v", "-i", interface]);
 
-    if !context.no_fixups {
+    if !context.no_fixups || stubs {
         args.add("--include");
         args.add("/config/af-packet.yaml");
     }
@@ -668,7 +668,7 @@ fn build_suricata_command(context: &Context, detached: bool) -> Result<std::proc
 
 fn suricata_dump_config(context: &Context) -> Result<Vec<String>> {
     context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
-    let mut command = build_suricata_command(context, false)?;
+    let mut command = build_suricata_command(context, false, false)?;
     command.arg("--dump-config");
     let output = command.output()?;
     if output.status.success() {
@@ -699,7 +699,7 @@ fn start_suricata_detached(context: &Context) -> Result<()> {
     }
 
     context.manager.quiet_rm(SURICATA_CONTAINER_NAME);
-    let mut command = build_suricata_command(context, true)?;
+    let mut command = build_suricata_command(context, true, true)?;
     for s in &set_args {
         command.arg("--set");
         command.arg(s);
