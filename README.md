@@ -1,5 +1,9 @@
 # Simple-IDS - Suricata/EveBox
 
+**Maintence of Simple-IDS has stalled. It has been replaced by EveCtl, a tool
+that allows more complex configurations, yet keeps a simple standalone mode --
+https://github.com/jasonish/evectl**
+
 Simple-IDS is a tool to easily run Suricata and EveBox Linux systems
 using Docker or Podman.
 
